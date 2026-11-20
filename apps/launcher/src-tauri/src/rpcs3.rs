@@ -169,8 +169,82 @@ fn input_config(pad: PadKind) -> Option<String> {
     Some(yml)
 }
 
+/// Ajustes conhecidos por jogo (o RPCS3 precisa de configuração especial para alguns títulos).
+/// Cada linha: (seção YAML, chave, valor); "Video/Vulkan" é uma subseção.
+/// Fontes: fórum e wiki do RPCS3. Quando um jogo novo travar, a correção entra aqui.
+fn game_fixes(title_id: &str) -> &'static [(&'static str, &'static str, &'static str)] {
+    match title_id {
+        // Call of Duty: Black Ops II (EUA/Europa). Sem isso o RSX trava na tela inicial
+        // ("semaphore_acquire has timed out") e o vigia do jogo o derruba ("Hang detected").
+        "BLUS31141" | "BLUS31011" | "BLES01717" | "BLES01718" | "BLES01719" | "BLES01720" => &[
+            ("Video", "Multithreaded RSX", "true"),
+            ("Video", "Vblank Rate", "120"),
+            ("Video/Vulkan", "Asynchronous Texture Streaming", "true"),
+            ("Core", "RSX FIFO Fetch Accuracy", "Atomic"),
+        ],
+        _ => &[],
+    }
+}
+
+/// Monta o YAML de ajustes por jogo (agrupado por seção e subseção).
+fn game_fixes_yaml(title_id: &str, fixes: &[(&str, &str, &str)]) -> String {
+    let mut out = format!("# Ajustes do ROXemu para {title_id}.\n");
+    let mut sections: Vec<&str> = fixes
+        .iter()
+        .map(|(s, _, _)| s.split('/').next().unwrap_or(s))
+        .collect();
+    sections.dedup();
+    for top in sections {
+        out.push_str(&format!("{top}:\n"));
+        for (s, k, v) in fixes.iter().filter(|(s, _, _)| *s == top) {
+            let _ = s;
+            out.push_str(&format!("  {k}: {v}\n"));
+        }
+        let mut subs: Vec<&str> = fixes
+            .iter()
+            .filter_map(|(s, _, _)| s.strip_prefix(&format!("{top}/")))
+            .collect();
+        subs.dedup();
+        for sub in subs {
+            out.push_str(&format!("  {sub}:\n"));
+            let full = format!("{top}/{sub}");
+            for (_, k, v) in fixes.iter().filter(|(s, _, _)| *s == full) {
+                out.push_str(&format!("    {k}: {v}\n"));
+            }
+        }
+    }
+    out
+}
+
+/// Escreve (ou remove) o arquivo de ajustes por jogo do RPCS3.
+fn apply_game_fixes(config_dir: &Path, serial: Option<&str>) -> Result<(), String> {
+    let Some(serial) = serial else { return Ok(()) };
+    let title_id: String = serial
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    let custom_dir = config_dir.join("custom_configs");
+    let path = custom_dir.join(format!("config_{title_id}.yml"));
+    // Só mexe em arquivo do ROXemu: ajustes feitos à mão no RPCS3 são respeitados.
+    let ours = std::fs::read_to_string(&path)
+        .map(|t| t.starts_with("# Ajustes do ROXemu"))
+        .unwrap_or(true);
+    if !ours {
+        return Ok(());
+    }
+    let fixes = game_fixes(&title_id);
+    if fixes.is_empty() {
+        let _ = std::fs::remove_file(&path);
+        return Ok(());
+    }
+    std::fs::create_dir_all(&custom_dir).map_err(|e| e.to_string())?;
+    log::info!("RPCS3: aplicando ajustes conhecidos para {title_id}");
+    std::fs::write(&path, game_fixes_yaml(&title_id, fixes)).map_err(|e| e.to_string())
+}
+
 /// Ajusta o RPCS3 para o jogo abrir pronto.
-pub fn configure(dir: &Path, pad: PadKind) -> Result<(), String> {
+pub fn configure(dir: &Path, pad: PadKind, serial: Option<&str>) -> Result<(), String> {
+    apply_game_fixes(&dir.join("config"), serial)?;
     let config_dir = dir.join("config");
     std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
     let cfg_path = config_dir.join("config.yml");
@@ -269,6 +343,19 @@ mod tests {
         assert!(xb.contains("Device: \"XInput Pad #1\""));
         assert!(xb.contains("    Cross: A\n") && xb.contains("    Circle: B\n"));
         assert!(input_config(PadKind::None).is_none());
+    }
+
+    #[test]
+    fn ajustes_do_black_ops_2() {
+        let dir = std::env::temp_dir().join(format!("rox-fix-{}", std::process::id()));
+        apply_game_fixes(&dir, Some("BLUS-31141")).unwrap();
+        let yml = std::fs::read_to_string(dir.join("custom_configs/config_BLUS31141.yml")).unwrap();
+        assert!(yml.contains("Video:\n  Multithreaded RSX: true\n  Vblank Rate: 120\n  Vulkan:\n    Asynchronous Texture Streaming: true\n"));
+        assert!(yml.contains("Core:\n  RSX FIFO Fetch Accuracy: Atomic\n"));
+        // Jogo sem ajustes: nenhum arquivo.
+        apply_game_fixes(&dir, Some("BLUS30000")).unwrap();
+        assert!(!dir.join("custom_configs/config_BLUS30000.yml").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

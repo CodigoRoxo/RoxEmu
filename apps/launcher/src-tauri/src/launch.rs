@@ -249,7 +249,7 @@ fn prepare_standalone(
             if rpcs3::firmware_version(&dir).is_none() {
                 return Err("Falta o firmware do PS3. Baixe o PS3UPDAT.PUP no site oficial da Sony e instale em Configurações → PlayStation 3.".into());
             }
-            rpcs3::configure(&dir, pad)?;
+            rpcs3::configure(&dir, pad, game.serial.as_deref())?;
             let target = rox_library::ps3::boot_target(&game.path);
             log::info!("iniciando {} com RPCS3 ({})", game.title, target.display());
             Ok(Prepared {

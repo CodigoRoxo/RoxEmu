@@ -1,5 +1,6 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Cover } from "../components/Cover";
+import { sizeForHeight, useCoverAspect } from "../hooks/useCoverAspect";
 import { SYSTEMS, discLabel, type Game, type SystemId } from "../data/games";
 
 /** Um item da fileira: um jogo, ou uma pasta de console (na estante "Todos"). */
@@ -14,8 +15,9 @@ interface Props {
   onToggleFavorite: (game: Game) => void;
 }
 
-const TILE = 118;
-const GAP = 14;
+/** Altura das capas na fileira; a largura vem do formato de cada capa. */
+const TILE_H = 118;
+const TILE_SEL_H = 150;
 
 /**
  * Modo Console, no espírito da home do PS5: fileira de jogos no topo (o selecionado cresce e
@@ -24,9 +26,22 @@ const GAP = 14;
 export function ConsoleView({ items, selected, onSelect, onActivate, onDetails, onToggleFavorite }: Props) {
   const item = items[selected];
   const rowRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState(0);
 
-  // A fileira desliza para a esquerda conforme anda, mantendo o selecionado sempre à vista.
-  const offset = Math.max(0, selected - 1) * (TILE + GAP);
+  // A fileira desliza até deixar um item antes do selecionado à vista. Como cada capa tem
+  // largura própria, mede a posição real (e mede de novo quando uma capa carrega e muda).
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const measure = () => {
+      const anchor = row.children[Math.max(0, selected - 1)] as HTMLElement | undefined;
+      setOffset(selected === 0 || !anchor ? 0 : anchor.offsetLeft);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [selected, items]);
 
   useEffect(() => {
     rowRef.current?.querySelector<HTMLElement>(".tile.sel")?.focus({ preventScroll: true });
@@ -38,24 +53,14 @@ export function ConsoleView({ items, selected, onSelect, onActivate, onDetails, 
     <section className="console ps">
       <div className="row-wrap">
         <div className="row" ref={rowRef} style={{ transform: `translateX(${-offset}px)` }}>
-          {items.map((it, i) => {
-            const sel = i === selected;
-            const key = it.kind === "game" ? `g${it.game.id}` : `f${it.system}`;
-            const label = it.kind === "game" ? it.game.title : SYSTEMS[it.system].name;
-            return (
-              <div className={`tile-slot${sel ? " sel" : ""}`} key={key}>
-                <button
-                  className={`tile${sel ? " sel" : ""}${it.kind === "folder" ? " folder" : ""}`}
-                  aria-label={label}
-                  tabIndex={sel ? 0 : -1}
-                  onClick={() => (sel ? onActivate(it) : onSelect(i))}
-                >
-                  {it.kind === "game" ? <Cover game={it.game} /> : <FolderArt system={it.system} games={it.games} />}
-                </button>
-                {sel && <span className="tile-name">{label}</span>}
-              </div>
-            );
-          })}
+          {items.map((it, i) => (
+            <Tile
+              key={it.kind === "game" ? `g${it.game.id}` : `f${it.system}`}
+              item={it}
+              selected={i === selected}
+              onClick={() => (i === selected ? onActivate(it) : onSelect(i))}
+            />
+          ))}
         </div>
       </div>
 
@@ -65,6 +70,26 @@ export function ConsoleView({ items, selected, onSelect, onActivate, onDetails, 
         <FolderHero system={item.system} games={item.games} onOpen={() => onActivate(item)} />
       )}
     </section>
+  );
+}
+
+function Tile({ item, selected, onClick }: { item: ShelfItem; selected: boolean; onClick: () => void }) {
+  const ar = useCoverAspect(item.kind === "game" ? item.game : undefined);
+  const size = sizeForHeight(item.kind === "game" ? ar : 1, selected ? TILE_SEL_H : TILE_H);
+  const label = item.kind === "game" ? item.game.title : SYSTEMS[item.system].name;
+  return (
+    <div className={`tile-slot${selected ? " sel" : ""}`}>
+      <button
+        className={`tile${selected ? " sel" : ""}${item.kind === "folder" ? " folder" : ""}`}
+        style={size}
+        aria-label={label}
+        tabIndex={selected ? 0 : -1}
+        onClick={onClick}
+      >
+        {item.kind === "game" ? <Cover game={item.game} /> : <FolderArt system={item.system} games={item.games} />}
+      </button>
+      {selected && <span className="tile-name">{label}</span>}
+    </div>
   );
 }
 
@@ -80,6 +105,7 @@ function GameHero({
   onToggleFavorite: (g: Game) => void;
 }) {
   const [earned, total] = game.trophies;
+  const ar = useCoverAspect(game);
   return (
     <div className="hero" key={game.id}>
       <div className="hero-info">
@@ -131,7 +157,7 @@ function GameHero({
           </button>
         </div>
       </div>
-      <div className="hero-art">
+      <div className="hero-art" style={{ aspectRatio: ar }}>
         <Cover game={game} />
       </div>
     </div>

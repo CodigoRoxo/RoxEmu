@@ -1,5 +1,5 @@
 import { SYSTEMS, type Game } from "../data/games";
-import { Cover } from "./Cover";
+import { FittedCover } from "./Cover";
 
 export type LaunchPhase = "starting" | "playing" | "error" | "demo";
 
@@ -26,7 +26,9 @@ export function LaunchOverlay({ session, onClose, onOpenBios, onAdd }: Props) {
   return (
     <div className={`launch ${phase}`} role="dialog" aria-label={game.title} onClick={closable ? onClose : undefined}>
       <div className="box" onClick={(e) => e.stopPropagation()}>
-        <Cover game={game} />
+        <div className="launch-cover">
+          <FittedCover game={game} />
+        </div>
 
         {phase === "starting" && (
           <>

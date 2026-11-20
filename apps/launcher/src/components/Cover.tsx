@@ -1,5 +1,22 @@
 import { useState, type CSSProperties } from "react";
 import { SYSTEMS, type Game } from "../data/games";
+import { useCoverAspect } from "../hooks/useCoverAspect";
+
+/**
+ * Capa encaixada num espaço qualquer sem cortar nem desfocar: retrato ocupa a altura,
+ * paisagem ocupa a largura, sempre no formato real da imagem (alinhada embaixo, como numa estante).
+ */
+export function FittedCover({ game, align = "center" }: { game: Game; align?: "center" | "start" }) {
+  const ar = useCoverAspect(game);
+  const frame: CSSProperties = ar <= 1 ? { height: "100%", aspectRatio: ar } : { width: "100%", aspectRatio: ar };
+  return (
+    <div className="cover-fit" style={{ justifyContent: align === "start" ? "flex-start" : "center" }}>
+      <div className="cover-frame" style={frame}>
+        <Cover game={game} />
+      </div>
+    </div>
+  );
+}
 
 /** Indicador de carregamento estilo iOS (12 tracinhos acendendo em roda). */
 export function IosSpinner({ label }: { label?: string }) {
@@ -26,8 +43,7 @@ export function Cover({ game }: { game: Game }) {
   if (game.coverUrl && broken !== game.coverUrl) {
     return (
       <div className="cover real" style={style}>
-        {/* Capas que não são quadradas (caixa de DVD do PS2): fundo com a própria arte desfocada */}
-        <img className="fill" src={game.coverUrl} alt="" draggable={false} aria-hidden="true" />
+        {/* Quem usa a capa dá a ela o formato da imagem (useCoverAspect): nada é cortado nem desfocado. */}
         <img
           className="main"
           src={game.coverUrl}

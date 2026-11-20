@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import { Cover } from "../components/Cover";
+import { FittedCover } from "../components/Cover";
 import { SYSTEMS, type Game, type SystemId } from "../data/games";
 
 interface Props {
@@ -93,7 +93,9 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRe
                   onClick={() => onSelect(g)}
                   onDoubleClick={() => onLaunch(g)}
                 >
-                  <Cover game={g} />
+                  <div className="cover-box">
+                    <FittedCover game={g} />
+                  </div>
                   <b>{g.title}</b>
                   <small>
                     <i className={g.playtime ? "" : "never"} />
@@ -132,7 +134,9 @@ function DetailPanel({
         ) : (
           <div className={`m m-${game.motif}`} style={{ left: "40%", width: "50%" }} />
         )}
-        <Cover game={game} />
+        <div className="banner-cover">
+          <FittedCover game={game} align="start" />
+        </div>
       </div>
       <h2>{game.title}</h2>
       <div className="tags left">

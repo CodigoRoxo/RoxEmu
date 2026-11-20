@@ -1,0 +1,11 @@
+[package]
+name = "rox-core-host"
+description = "Frontend libretro do ROXemu: carrega cores (.dll) e conversa com eles via FFI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+libloading.workspace = true
+thiserror.workspace = true
+log.workspace = true

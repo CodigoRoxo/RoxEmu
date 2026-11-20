@@ -1,0 +1,11 @@
+[package]
+name = "rox-library"
+description = "Biblioteca de jogos do ROXemu: reconhece formatos, agrupa discos e extrai o serial."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rox-common.workspace = true
+serde.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,39 @@
+# Cores libretro usados pelo ROXemu.
+#
+# Regra de ouro: NUNCA baixar uma .dll pronta. Cada core é compilado a partir do repositório
+# oficial, no commit fixado aqui. Depois do primeiro build, o script grava o SHA-256 da .dll em
+# `sha256`; builds futuros com hash diferente param com erro (alguém mexeu no código ou no
+# compilador). Para atualizar um core: troque o `commit`, apague o `sha256` e rode o script.
+#
+# Commits fixados em 2026-11-19.
+
+[swanstation]
+description = "PS1 (padrão). Fork GPL do DuckStation para libretro."
+license = "GPL-3.0"
+repo = "https://github.com/libretro/swanstation"
+commit = "631f0fb31b809e0f889d7c551fe695788e39c1d3"
+build = "cmake"
+output = "swanstation_libretro.dll"
+sha256 = ""
+
+[beetle-psx-hw]
+description = "PS1 (modo precisão). Mednafen PSX com renderer por hardware."
+license = "GPL-2.0"
+repo = "https://github.com/libretro/beetle-psx-libretro"
+commit = "cbc5a8d0271830a43417179c4ae29e18fdf9b579"
+build = "make"
+make_args = "HAVE_HW=1"
+output = "mednafen_psx_hw_libretro.dll"
+sha256 = ""
+enabled = false   # precisa de MSYS2/MinGW; entra depois da Fase 1
+
+[pcsx-rearmed]
+description = "PS1 (PCs fracos)."
+license = "GPL-2.0"
+repo = "https://github.com/libretro/pcsx_rearmed"
+commit = "7b0e8f8fadfbce3d170d195b9d9eecaabfa08c8e"
+build = "make"
+make_args = "-f Makefile.libretro"
+output = "pcsx_rearmed_libretro.dll"
+sha256 = ""
+enabled = false   # precisa de MSYS2/MinGW; entra depois da Fase 1

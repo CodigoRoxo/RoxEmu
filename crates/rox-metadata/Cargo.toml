@@ -1,0 +1,10 @@
+[package]
+name = "rox-metadata"
+description = "Metadados e capas do ROXemu (libretro-thumbnails, base Redump)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rox-common.workspace = true
+serde.workspace = true

@@ -1,0 +1,11 @@
+{
+  "name": "roxemu",
+  "private": true,
+  "packageManager": "pnpm@10.34.9",
+  "scripts": {
+    "dev": "pnpm --filter launcher tauri dev",
+    "build": "pnpm --filter launcher tauri build",
+    "lint": "pnpm --filter launcher lint",
+    "typecheck": "pnpm --filter launcher typecheck"
+  }
+}

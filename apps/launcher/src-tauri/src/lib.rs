@@ -1,8 +1,10 @@
 //! Backend do launcher: comandos que a interface chama via `invoke`.
 
 mod covers;
+mod ini;
 mod launch;
 mod library;
+mod pcsx2;
 
 use std::sync::Mutex;
 
@@ -25,13 +27,13 @@ struct SystemInfo {
     extensions: &'static [&'static str],
     default_core: &'static str,
     requires_bios: bool,
+    has_bios: bool,
 }
 
 #[derive(Serialize)]
 struct AppInfo {
     version: &'static str,
     data: DataDirs,
-    ps1_bios: bool,
     systems: Vec<SystemInfo>,
 }
 
@@ -46,12 +48,12 @@ fn app_info(state: State<AppState>) -> AppInfo {
             extensions: id.extensions(),
             default_core: id.default_core(),
             requires_bios: id.requires_bios(),
+            has_bios: launch::has_bios(&state.data.bios, id),
         })
         .collect();
     AppInfo {
         version: env!("CARGO_PKG_VERSION"),
         data: state.data.clone(),
-        ps1_bios: launch::has_ps1_bios(&state.data.bios),
         systems,
     }
 }
@@ -65,12 +67,17 @@ fn list_games(state: State<AppState>) -> Result<Vec<LibraryGame>, String> {
 /// Abre o seletor de arquivos e adiciona o jogo escolhido. `None` = usuário cancelou.
 #[tauri::command]
 async fn add_game(app: AppHandle) -> Result<Option<LibraryGame>, String> {
-    let exts = SystemId::Ps1.extensions();
+    let mut exts: Vec<&str> = [SystemId::Ps1, SystemId::Ps2]
+        .iter()
+        .flat_map(|s| s.extensions().iter().copied())
+        .collect();
+    exts.sort_unstable();
+    exts.dedup();
     let Some(file) = app
         .dialog()
         .file()
-        .set_title("Escolha um jogo de PlayStation")
-        .add_filter("Jogos de PlayStation", exts)
+        .set_title("Escolha um jogo de PlayStation ou PlayStation 2")
+        .add_filter("Jogos de PS1 e PS2", &exts)
         .blocking_pick_file()
     else {
         return Ok(None);

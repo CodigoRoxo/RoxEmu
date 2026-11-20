@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use rox_common::SystemId;
 use serde::Serialize;
 
-use crate::{cue, detect_format, ps1, GameFormat};
+use crate::{cue, formats::detect_disc_format, ps1, GameFormat};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GameFile {
@@ -29,10 +29,10 @@ pub enum InspectError {
     Read(PathBuf),
 }
 
-/// Descobre o console pela extensão. Por enquanto só PS1 tem core no ROXemu.
+/// Descobre console, formato e serial do arquivo. Ordem de confiança para o console:
+/// `SYSTEM.CNF` dentro do disco > extensão exclusiva > nome da pasta > tamanho do arquivo.
 pub fn inspect(path: &Path) -> Result<GameFile, InspectError> {
-    let system = SystemId::Ps1;
-    let format = detect_format(system, path).ok_or_else(|| {
+    let format = detect_disc_format(path).ok_or_else(|| {
         InspectError::Unsupported(
             path.extension()
                 .map(|e| e.to_string_lossy().to_string())
@@ -49,7 +49,8 @@ pub fn inspect(path: &Path) -> Result<GameFile, InspectError> {
 
     let mut size = meta.len();
     let mut discs = 1;
-    let mut serial = None;
+    let mut disc_id = None;
+    let mut inner_system = None;
     let label = match format {
         GameFormat::Cue => {
             let text = std::fs::read_to_string(path)
@@ -58,10 +59,10 @@ pub fn inspect(path: &Path) -> Result<GameFile, InspectError> {
             for f in &sheet.files {
                 size += std::fs::metadata(dir.join(f)).map(|m| m.len()).unwrap_or(0);
             }
-            serial = sheet
+            disc_id = sheet
                 .files
                 .first()
-                .and_then(|f| ps1::scan_serial(&dir.join(f)));
+                .and_then(|f| ps1::identify_disc(&dir.join(f)));
             match sheet.track_count {
                 0 | 1 => "BIN/CUE".to_string(),
                 n => format!("BIN/CUE · {n} faixas"),
@@ -78,28 +79,67 @@ pub fn inspect(path: &Path) -> Result<GameFile, InspectError> {
             discs = entries.len().max(1) as u32;
             if let Some(first) = entries.first() {
                 if let Ok(inner) = inspect(&dir.join(first)) {
-                    serial = inner.serial;
+                    inner_system = Some(inner.system);
+                    disc_id = inner.serial.map(|serial| ps1::DiscId {
+                        system: inner.system,
+                        serial,
+                    });
                 }
             }
             format!("M3U · {discs} discos")
         }
         GameFormat::Iso | GameFormat::Bin => {
-            serial = ps1::scan_serial(path);
+            disc_id = ps1::identify_disc(path);
             format.label().to_string()
         }
         other => other.label().to_string(),
     };
+
+    let system = disc_id
+        .as_ref()
+        .map(|d| d.system)
+        .or(inner_system)
+        .unwrap_or_else(|| guess_system(path, format, size));
 
     Ok(GameFile {
         system,
         title,
         region,
         format: label,
-        serial,
+        serial: disc_id.map(|d| d.serial),
         size_bytes: size,
         discs,
         launch_path: path.to_path_buf(),
     })
+}
+
+/// Quando não dá para ler o disco (CHD, PBP, CSO...): decide pela extensão, pasta e tamanho.
+fn guess_system(path: &Path, format: GameFormat, size: u64) -> SystemId {
+    match format {
+        GameFormat::Cso | GameFormat::Gz | GameFormat::Elf => return SystemId::Ps2,
+        GameFormat::Pbp => return SystemId::Ps1,
+        _ => {}
+    }
+    let lower = path.to_string_lossy().to_ascii_lowercase();
+    let in_folder = |names: &[&str]| {
+        lower.split(['\\', '/']).any(|part| {
+            names
+                .iter()
+                .any(|n| part == *n || part.starts_with(&format!("{n} ")))
+        })
+    };
+    if in_folder(&["ps2", "playstation 2", "playstation2"]) {
+        return SystemId::Ps2;
+    }
+    if in_folder(&["ps1", "psx", "psone", "playstation", "playstation 1"]) {
+        return SystemId::Ps1;
+    }
+    // Um CD de PS1 tem no máximo ~800 MB; acima disso é DVD de PS2.
+    if size > 900 * 1024 * 1024 {
+        SystemId::Ps2
+    } else {
+        SystemId::Ps1
+    }
 }
 
 /// "Jogo Legal (USA) (Disc 1)" -> ("Jogo Legal", Some("NTSC-U")).
@@ -188,7 +228,41 @@ mod tests {
         assert_eq!(g.region.as_deref(), Some("NTSC-U"));
         assert_eq!(g.serial.as_deref(), Some("SLUS-00594"));
         assert_eq!(g.format, "BIN/CUE");
+        assert_eq!(g.system, SystemId::Ps1);
         assert!(g.size_bytes >= 40_000);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn iso_de_ps2_vira_ps2() {
+        let dir = std::env::temp_dir().join(format!("rox-ps2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let iso = crate::iso9660::tests::fake_iso("BOOT2 = cdrom0:\\SLUS_203.12;1\r\n");
+        let path = dir.join("Jogo Dois (USA).iso");
+        std::fs::write(&path, iso).unwrap();
+        let g = inspect(&path).unwrap();
+        assert_eq!(g.system, SystemId::Ps2);
+        assert_eq!(g.serial.as_deref(), Some("SLUS-20312"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn chd_usa_pasta_para_decidir() {
+        let p = Path::new("E:/RoxEmuGames/ps2/Jogo (USA).chd");
+        assert_eq!(guess_system(p, GameFormat::Chd, 10), SystemId::Ps2);
+        let p = Path::new("E:/RoxEmuGames/ps1/Jogo (USA).chd");
+        assert_eq!(
+            guess_system(p, GameFormat::Chd, 2_000_000_000),
+            SystemId::Ps1
+        );
+        let p = Path::new("E:/Jogos/Jogo.chd");
+        assert_eq!(
+            guess_system(p, GameFormat::Chd, 2_000_000_000),
+            SystemId::Ps2
+        );
+        assert_eq!(
+            guess_system(Path::new("x.cso"), GameFormat::Cso, 1),
+            SystemId::Ps2
+        );
     }
 }

@@ -6,6 +6,7 @@
 pub mod cue;
 pub mod formats;
 pub mod game;
+pub mod iso9660;
 pub mod ps1;
 
 pub use formats::{detect_format, GameFormat};

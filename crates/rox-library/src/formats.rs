@@ -24,6 +24,12 @@ pub enum GameFormat {
     Rom,
     /// ROM dentro de um `.zip`.
     Zip,
+    /// ISO comprimida do PS2 (CSO/ZSO).
+    Cso,
+    /// ISO comprimida com gzip (PCSX2).
+    Gz,
+    /// Executável de PS2 solto (homebrew).
+    Elf,
 }
 
 impl GameFormat {
@@ -38,6 +44,9 @@ impl GameFormat {
             GameFormat::Bin => "BIN",
             GameFormat::Rom => "ROM",
             GameFormat::Zip => "ZIP",
+            GameFormat::Cso => "CSO",
+            GameFormat::Gz => "GZ",
+            GameFormat::Elf => "ELF",
         }
     }
 
@@ -62,8 +71,16 @@ pub fn detect_format(system: SystemId, path: &Path) -> Option<GameFormat> {
         "iso" => GameFormat::Iso,
         "bin" => GameFormat::Bin,
         "zip" => GameFormat::Zip,
+        "cso" | "zso" => GameFormat::Cso,
+        "gz" => GameFormat::Gz,
+        "elf" => GameFormat::Elf,
         _ => GameFormat::Rom,
     })
+}
+
+/// Formato pela extensão, considerando todos os consoles de disco (PS1 e PS2).
+pub fn detect_disc_format(path: &Path) -> Option<GameFormat> {
+    detect_format(SystemId::Ps2, path).or_else(|| detect_format(SystemId::Ps1, path))
 }
 
 #[cfg(test)]

@@ -9,7 +9,15 @@ export function Cover({ game }: { game: Game }) {
   if (game.coverUrl && broken !== game.coverUrl) {
     return (
       <div className="cover real" style={style}>
-        <img src={game.coverUrl} alt={`Capa de ${game.title}`} draggable={false} onError={() => setBroken(game.coverUrl!)} />
+        {/* Capas que não são quadradas (caixa de DVD do PS2): fundo com a própria arte desfocada */}
+        <img className="fill" src={game.coverUrl} alt="" draggable={false} aria-hidden="true" />
+        <img
+          className="main"
+          src={game.coverUrl}
+          alt={`Capa de ${game.title}`}
+          draggable={false}
+          onError={() => setBroken(game.coverUrl!)}
+        />
       </div>
     );
   }

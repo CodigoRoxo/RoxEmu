@@ -30,3 +30,7 @@ Thumbs.db
 
 # Tauri (gerado)
 /apps/launcher/src-tauri/gen/
+
+# Emuladores completos baixados (emulators/fetch-emulators.ps1)
+/emulators/bin/
+/emulators/downloads/

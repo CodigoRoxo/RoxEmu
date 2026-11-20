@@ -4,14 +4,20 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 export interface AppInfo {
   version: string;
   data: { root: string; bios: string; portable: boolean };
-  ps1_bios: boolean;
-  systems: { id: string; name: string; extensions: string[]; default_core: string; requires_bios: boolean }[];
+  systems: {
+    id: string;
+    name: string;
+    extensions: string[];
+    default_core: string;
+    requires_bios: boolean;
+    has_bios: boolean;
+  }[];
 }
 
 /** Jogo como o backend guarda (library.json). */
 export interface LibraryGame {
   id: number;
-  system: "ps1" | "snes" | "gba";
+  system: "ps1" | "ps2" | "snes" | "gba";
   title: string;
   region: string | null;
   serial: string | null;

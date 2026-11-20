@@ -31,9 +31,17 @@ prototypes/           Protótipos visuais em HTML
 pnpm install          # dependências da interface
 pnpm dev              # abre o ROXemu em modo desenvolvimento
 cargo test --workspace
-./cores/build-cores.ps1   # compila o SwanStation a partir do fonte
+./cores/build-cores.ps1          # compila o SwanStation (PS1) a partir do fonte
+./emulators/fetch-emulators.ps1  # baixa o PCSX2 (PS2) do release oficial e confere o SHA-256
 cargo build -p rox-runner --release
 ```
+
+### PS2
+
+O PS2 roda no **PCSX2** embutido: o ROXemu configura e abre ele direto em tela cheia, já com a
+BIOS, pastas de save e controle. Coloque a BIOS do seu PS2 (arquivo de 4 MB, ex.: `scph39001.bin`)
+na mesma pasta de BIOS do ROXemu. ISO e CHD funcionam; com CHD, deixe os jogos numa pasta `ps2`
+para o ROXemu saber o console. Para sair do jogo: Esc ou Guide e fechar pelo menu.
 
 ### Rodar um jogo de PS1 (Fase 1)
 

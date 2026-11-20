@@ -44,15 +44,16 @@ export function LaunchOverlay({ session, onClose, onOpenBios, onAdd }: Props) {
           <>
             <h3>Jogando agora</h3>
             <p>
-              {game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do
-              controle.
+              {game.system === "ps2"
+                ? `${game.title} está aberto no PCSX2. Para sair, aperte Esc ou o botão Guide do controle e escolha fechar o jogo no menu.`
+                : `${game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do controle.`}
             </p>
           </>
         )}
 
         {phase === "error" && (
           <>
-            <h3>{biosMissing ? "Falta a BIOS do PlayStation" : "Não deu para abrir o jogo"}</h3>
+            <h3>{biosMissing ? `Falta a BIOS do ${SYSTEMS[game.system].name}` : "Não deu para abrir o jogo"}</h3>
             <p className="err">{message}</p>
             <div className="actions">
               {biosMissing && (

@@ -311,6 +311,18 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 - [ ] Assinatura de código, hashes publicados e auto-update assinado.
 - [ ] Página de release explicando como verificar os hashes.
 
+### PS2 (adiantado) *(feito em 2026-11-20)*
+- [x] PCSX2 v2.8.2 embutido (release oficial, SHA-256 conferido por `emulators/fetch-emulators.ps1`).
+- [x] Console reconhecido sozinho: `BOOT2` no SYSTEM.CNF (ISO), extensão (CSO/GZ) ou pasta `ps2` (CHD).
+- [x] O ROXemu configura o PCSX2 a cada jogo: BIOS, saves, tela cheia, sem assistente nem
+      atualização automática, controle mapeado; a estante conta o tempo de jogo.
+- [ ] Trocar pelo core libretro (LRPS2) quando o runner tiver renderização por GPU (Fase 4).
+- [ ] Compilar o PCSX2 do fonte no CI das releases.
+
+### Sons de interface *(feito em 2026-11-20)*
+- [x] Sons sintetizados na hora (Web Audio, sem arquivos de terceiros): navegar, categoria,
+      confirmar, voltar, abrir jogo, erro, favoritar, aviso e boot. Botão para ligar/desligar.
+
 ### Fase 6 — Além do PS1
 - [ ] Abstração `System`: cada console é um módulo que declara:
   - os formatos aceitos e como abrir cada um (BIN/CUE, ISO, CHD, ZIP, M3U…);

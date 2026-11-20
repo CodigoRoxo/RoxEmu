@@ -1,7 +1,8 @@
 //! Consoles suportados.
 //!
-//! Cada console declara os formatos que aceita e o core padrão. Para quem joga, um jogo é
-//! sempre só "um jogo": quem resolve BIN/CUE, ISO, CHD, ZIP ou multi-disco é o módulo do console.
+//! Cada console declara os formatos que aceita, o emulador padrão e se precisa de BIOS. Para
+//! quem joga, um jogo é sempre só "um jogo": quem resolve BIN/CUE, ISO, CHD, CSO ou multi-disco
+//! é o módulo do console.
 
 use serde::{Deserialize, Serialize};
 
@@ -9,17 +10,29 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum SystemId {
     Ps1,
+    Ps2,
     Snes,
     Gba,
 }
 
+/// Como o ROXemu roda o console.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Engine {
+    /// Core libretro dentro do `rox-runner`.
+    Libretro,
+    /// Emulador completo embutido (ex.: PCSX2), controlado pelo ROXemu.
+    Standalone,
+}
+
 impl SystemId {
-    pub const ALL: [SystemId; 3] = [SystemId::Ps1, SystemId::Snes, SystemId::Gba];
+    pub const ALL: [SystemId; 4] = [SystemId::Ps1, SystemId::Ps2, SystemId::Snes, SystemId::Gba];
 
     /// Nome exibido na interface.
     pub fn display_name(self) -> &'static str {
         match self {
             SystemId::Ps1 => "PlayStation",
+            SystemId::Ps2 => "PlayStation 2",
             SystemId::Snes => "Super Nintendo",
             SystemId::Gba => "Game Boy Advance",
         }
@@ -30,15 +43,24 @@ impl SystemId {
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             SystemId::Ps1 => &["m3u", "cue", "chd", "pbp", "iso", "bin"],
+            SystemId::Ps2 => &["m3u", "chd", "iso", "cso", "zso", "gz", "cue", "bin", "elf"],
             SystemId::Snes => &["sfc", "smc", "zip"],
             SystemId::Gba => &["gba", "zip"],
         }
     }
 
-    /// Nome do core libretro padrão (sem sufixo `_libretro.dll`).
+    pub fn engine(self) -> Engine {
+        match self {
+            SystemId::Ps2 => Engine::Standalone,
+            _ => Engine::Libretro,
+        }
+    }
+
+    /// Core libretro (sem `_libretro.dll`) ou nome do emulador completo (pasta em `emulators/`).
     pub fn default_core(self) -> &'static str {
         match self {
             SystemId::Ps1 => "swanstation",
+            SystemId::Ps2 => "pcsx2",
             SystemId::Snes => "snes9x",
             SystemId::Gba => "mgba",
         }
@@ -46,13 +68,23 @@ impl SystemId {
 
     /// Precisa de BIOS fornecida pelo usuário?
     pub fn requires_bios(self) -> bool {
-        matches!(self, SystemId::Ps1)
+        matches!(self, SystemId::Ps1 | SystemId::Ps2)
+    }
+
+    /// Tamanho exato do arquivo de BIOS, usado para reconhecer a BIOS na pasta.
+    pub fn bios_size(self) -> Option<u64> {
+        match self {
+            SystemId::Ps1 => Some(512 * 1024),
+            SystemId::Ps2 => Some(4 * 1024 * 1024),
+            _ => None,
+        }
     }
 
     /// Nome da pasta usada pelo libretro-thumbnails para buscar capas.
     pub fn thumbnails_repo(self) -> &'static str {
         match self {
             SystemId::Ps1 => "Sony_-_PlayStation",
+            SystemId::Ps2 => "Sony_-_PlayStation_2",
             SystemId::Snes => "Nintendo_-_Super_Nintendo_Entertainment_System",
             SystemId::Gba => "Nintendo_-_Game_Boy_Advance",
         }
@@ -66,11 +98,14 @@ mod tests {
     #[test]
     fn serializa_em_minusculas() {
         assert_eq!(serde_json::to_string(&SystemId::Ps1).unwrap(), "\"ps1\"");
+        assert_eq!(serde_json::to_string(&SystemId::Ps2).unwrap(), "\"ps2\"");
     }
 
     #[test]
-    fn ps1_exige_bios() {
-        assert!(SystemId::Ps1.requires_bios());
+    fn bios_e_motor() {
+        assert!(SystemId::Ps2.requires_bios());
         assert!(!SystemId::Gba.requires_bios());
+        assert_eq!(SystemId::Ps2.engine(), Engine::Standalone);
+        assert_eq!(SystemId::Ps1.engine(), Engine::Libretro);
     }
 }

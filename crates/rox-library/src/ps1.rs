@@ -1,28 +1,57 @@
-//! Identificação de jogos de PS1.
+//! Identificação de discos de PlayStation (PS1 e PS2).
 //!
-//! Todo disco de PS1 tem um `SYSTEM.CNF` na raiz com uma linha como
-//! `BOOT = cdrom:\SLUS_005.94;1`. O nome do executável é o serial do jogo,
-//! que a gente normaliza para `SLUS-00594` e cruza com a base Redump.
+//! Todo disco tem um `SYSTEM.CNF` na raiz. No PS1 a linha é `BOOT = cdrom:\SLUS_005.94;1`;
+//! no PS2 é `BOOT2 = cdrom0:\SLUS_203.12;1`. Daí sai o console e o serial do jogo, que a gente
+//! normaliza para `SLUS-00594` e usa para achar nome e capa.
 
-/// Extrai o serial normalizado do conteúdo de um `SYSTEM.CNF`.
-pub fn serial_from_system_cnf(text: &str) -> Option<String> {
-    let boot = text.lines().find_map(|line| {
-        let (key, value) = line.split_once('=')?;
-        key.trim()
-            .eq_ignore_ascii_case("BOOT")
-            .then(|| value.trim())
-    })?;
-    // "cdrom:\SLUS_005.94;1" ou "cdrom:SLUS_005.94;1" ou "cdrom:\\EXE\\SCES_011.20;1"
-    let file = boot.rsplit(['\\', ':', '/']).next()?;
-    let file = file.split(';').next()?;
-    normalize_serial(file)
+use rox_common::SystemId;
+
+/// Console e serial lidos do disco.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscId {
+    pub system: SystemId,
+    pub serial: String,
 }
 
-/// Procura o `SYSTEM.CNF` nos primeiros megabytes de uma imagem BIN ou ISO e devolve o serial.
-///
-/// Não precisa entender ISO9660: o arquivo de texto fica logo no início do disco, então basta
-/// achar a linha `BOOT = cdrom:...`. Para CHD e PBP (comprimidos) retorna `None` por enquanto.
-pub fn scan_serial(data_file: &std::path::Path) -> Option<String> {
+/// Lê o `SYSTEM.CNF` e diz de qual console é o disco e qual o serial.
+pub fn disc_id_from_system_cnf(text: &str) -> Option<DiscId> {
+    let mut found = None;
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let system = match key.trim().to_ascii_uppercase().as_str() {
+            "BOOT2" => SystemId::Ps2,
+            "BOOT" => SystemId::Ps1,
+            _ => continue,
+        };
+        // "cdrom:\SLUS_005.94;1", "cdrom0:\SLUS_203.12;1", "cdrom:\\EXE\\SCES_011.20;1"
+        let file = value.trim().rsplit(['\\', ':', '/']).next()?;
+        let file = file.split(';').next()?;
+        if let Some(serial) = normalize_serial(file) {
+            found = Some(DiscId { system, serial });
+            if system == SystemId::Ps2 {
+                break; // BOOT2 é definitivo
+            }
+        }
+    }
+    found
+}
+
+/// Só o serial (compatibilidade).
+pub fn serial_from_system_cnf(text: &str) -> Option<String> {
+    disc_id_from_system_cnf(text).map(|d| d.serial)
+}
+
+/// Identifica um disco: primeiro lendo o ISO9660 de verdade; se não der (ex.: imagem estranha),
+/// procura a linha do `SYSTEM.CNF` nos primeiros megabytes. CHD/CSO/PBP comprimidos: `None`.
+pub fn identify_disc(data_file: &std::path::Path) -> Option<DiscId> {
+    if let Some(id) = crate::iso9660::read_system_cnf(data_file)
+        .as_deref()
+        .and_then(disc_id_from_system_cnf)
+    {
+        return Some(id);
+    }
     use std::io::Read;
     const LIMIT: u64 = 8 * 1024 * 1024;
     let mut buf = Vec::new();
@@ -34,7 +63,12 @@ pub fn scan_serial(data_file: &std::path::Path) -> Option<String> {
     find_boot_line(&buf)
 }
 
-fn find_boot_line(buf: &[u8]) -> Option<String> {
+/// Só o serial de um arquivo de disco (compatibilidade).
+pub fn scan_serial(data_file: &std::path::Path) -> Option<String> {
+    identify_disc(data_file).map(|d| d.serial)
+}
+
+fn find_boot_line(buf: &[u8]) -> Option<DiscId> {
     let mut start = 0;
     while let Some(pos) = buf[start..].windows(4).position(|w| w == b"BOOT") {
         let at = start + pos;
@@ -45,8 +79,8 @@ fn find_boot_line(buf: &[u8]) -> Option<String> {
             .map(|&b| b as char)
             .collect();
         if line.to_ascii_lowercase().contains("cdrom") {
-            if let Some(serial) = serial_from_system_cnf(&line) {
-                return Some(serial);
+            if let Some(id) = disc_id_from_system_cnf(&line) {
+                return Some(id);
             }
         }
         start = at + 4;
@@ -93,7 +127,22 @@ mod tests {
         disco[100..104].copy_from_slice(b"BOOT"); // falso positivo sem "cdrom"
         let cnf = b"BOOT = cdrom:\\SLES_123.45;1\r\nTCB = 4\r\n";
         disco[30_000..30_000 + cnf.len()].copy_from_slice(cnf);
-        assert_eq!(find_boot_line(&disco).as_deref(), Some("SLES-12345"));
+        assert_eq!(
+            find_boot_line(&disco).map(|d| d.serial).as_deref(),
+            Some("SLES-12345")
+        );
+    }
+
+    #[test]
+    fn boot2_e_ps2() {
+        let id = disc_id_from_system_cnf(
+            "BOOT2 = cdrom0:\\SLUS_203.12;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n",
+        )
+        .unwrap();
+        assert_eq!(id.system, SystemId::Ps2);
+        assert_eq!(id.serial, "SLUS-20312");
+        let ps1 = disc_id_from_system_cnf("BOOT = cdrom:\\SLUS_012.12;1").unwrap();
+        assert_eq!(ps1.system, SystemId::Ps1);
     }
 
     #[test]

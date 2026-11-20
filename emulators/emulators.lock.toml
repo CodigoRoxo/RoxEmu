@@ -1,0 +1,15 @@
+# Emuladores completos (standalone) que o ROXemu embute e controla.
+#
+# Usados para consoles que precisam de GPU (PS2), até o runner ganhar renderização por
+# hardware (Fase 4). Baixados SÓ do release oficial do projeto, na versão fixada aqui, e o
+# SHA-256 é conferido antes de extrair. Para atualizar: troque version/url/sha256 juntos.
+# Meta: compilar também estes a partir do fonte no CI das releases do ROXemu.
+
+[pcsx2]
+description = "PlayStation 2"
+license = "GPL-3.0 (com partes LGPL)"
+repo = "https://github.com/PCSX2/pcsx2"
+version = "v2.8.2"
+url = "https://github.com/PCSX2/pcsx2/releases/download/v2.8.2/pcsx2-v2.8.2-windows-x64-Qt.7z"
+sha256 = "7dfc829ca1994cc1045ac49f05e39b6cf968b72e6a374c40e05c2a2b4ac200b4"
+exe = "pcsx2-qt.exe"

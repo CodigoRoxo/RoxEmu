@@ -107,8 +107,18 @@ async fn install_ps3_firmware(app: AppHandle) -> Result<bool, String> {
     let mut child = rpcs3::install_firmware_command(&dir, &pup)
         .spawn()
         .map_err(|e| format!("Não foi possível abrir o RPCS3: {e}"))?;
+    // O instalador do RPCS3 abre atrás do ROXemu; minimiza para ele aparecer na frente.
+    let main = app.get_webview_window("main");
+    if let Some(w) = &main {
+        let _ = w.minimize();
+    }
     std::thread::spawn(move || {
         let _ = child.wait();
+        // Instalação terminou (o usuário fechou o RPCS3): volta o ROXemu para a frente.
+        if let Some(w) = &main {
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
         let _ = tauri::Emitter::emit(&app, "ps3-firmware", rpcs3::firmware_version(&dir));
     });
     Ok(true)

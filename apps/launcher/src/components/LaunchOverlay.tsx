@@ -51,7 +51,7 @@ export function LaunchOverlay({ session, onClose, onOpenBios, onOpenSettings, on
               {game.system === "ps2"
                 ? `${game.title} está aberto no PCSX2. Para sair, aperte Esc ou o botão Guide do controle e escolha fechar o jogo no menu.`
                 : game.system === "ps3"
-                  ? `${game.title} está aberto no RPCS3. Para sair, feche a janela do jogo (Alt+F4). Na primeira vez o RPCS3 prepara os shaders e pode demorar um pouco.`
+                  ? `${game.title} está aberto no RPCS3. Nas primeiras vezes o emulador traduz o código do jogo enquanto ele roda: telas de carregamento podem ficar paradas por alguns minutos. Não feche — fica mais rápido a cada vez. Para sair, feche a janela do jogo (Alt+F4).`
                   : `${game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do controle.`}
             </p>
           </>

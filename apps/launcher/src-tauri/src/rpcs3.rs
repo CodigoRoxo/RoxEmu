@@ -174,13 +174,12 @@ fn input_config(pad: PadKind) -> Option<String> {
 /// Fontes: fórum e wiki do RPCS3. Quando um jogo novo travar, a correção entra aqui.
 fn game_fixes(title_id: &str) -> &'static [(&'static str, &'static str, &'static str)] {
     match title_id {
-        // Call of Duty: Black Ops II (EUA/Europa). Sem isso o RSX trava na tela inicial
-        // ("semaphore_acquire has timed out") e o vigia do jogo o derruba ("Hang detected").
+        // Call of Duty: Black Ops II (EUA/Europa). Configuração recomendada pelo wiki do RPCS3.
+        // Atenção: o jogo ainda pode travar ("Hang detected") por um bug do RPCS3 no SPURS
+        // (issue RPCS3/rpcs3#16426, aberta); nenhuma configuração resolve isso por completo.
         "BLUS31141" | "BLUS31011" | "BLES01717" | "BLES01718" | "BLES01719" | "BLES01720" => &[
-            ("Video", "Multithreaded RSX", "true"),
-            ("Video", "Vblank Rate", "120"),
-            ("Video/Vulkan", "Asynchronous Texture Streaming", "true"),
             ("Core", "RSX FIFO Fetch Accuracy", "Atomic"),
+            ("Core", "SPU Block Size", "Safe"),
         ],
         _ => &[],
     }
@@ -350,8 +349,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("rox-fix-{}", std::process::id()));
         apply_game_fixes(&dir, Some("BLUS-31141")).unwrap();
         let yml = std::fs::read_to_string(dir.join("custom_configs/config_BLUS31141.yml")).unwrap();
-        assert!(yml.contains("Video:\n  Multithreaded RSX: true\n  Vblank Rate: 120\n  Vulkan:\n    Asynchronous Texture Streaming: true\n"));
-        assert!(yml.contains("Core:\n  RSX FIFO Fetch Accuracy: Atomic\n"));
+        assert!(yml.contains("Core:\n  RSX FIFO Fetch Accuracy: Atomic\n  SPU Block Size: Safe\n"));
+        // Subseções continuam funcionando (ex.: Video/Vulkan).
+        let nested = game_fixes_yaml("X", &[("Video", "A", "1"), ("Video/Vulkan", "B", "2")]);
+        assert!(nested.contains("Video:\n  A: 1\n  Vulkan:\n    B: 2\n"));
         // Jogo sem ajustes: nenhum arquivo.
         apply_game_fixes(&dir, Some("BLUS30000")).unwrap();
         assert!(!dir.join("custom_configs/config_BLUS30000.yml").exists());

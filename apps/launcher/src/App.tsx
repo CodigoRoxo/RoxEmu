@@ -1,27 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ambient } from "./components/Ambient";
 import { LaunchOverlay, type LaunchSession } from "./components/LaunchOverlay";
-import { CATEGORIES, SAMPLE_GAMES, fromLibrary, type Game } from "./data/games";
+import { CATEGORIES, SAMPLE_GAMES, SYSTEMS, fromLibrary, type Game, type SystemId } from "./data/games";
 import { useCoverColors } from "./hooks/useCoverColors";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
 import * as backend from "./lib/backend";
 import type { AppInfo, LibraryGame } from "./lib/backend";
 import * as sound from "./lib/sounds";
-import { ConsoleView } from "./views/ConsoleView";
+import { ConsoleView, type ShelfItem } from "./views/ConsoleView";
 import { LibraryView } from "./views/LibraryView";
 
 type Mode = "console" | "library";
 
+interface Shelf {
+  id: string;
+  label: string;
+  system?: SystemId;
+}
+
+/** Ordem das estantes de console no topo. */
+const SYSTEM_ORDER: SystemId[] = ["ps1", "ps2", "snes", "gba"];
+
 export default function App() {
   const [library, setLibrary] = useState<LibraryGame[]>([]);
   const [demoFavs, setDemoFavs] = useState<Set<number>>(new Set());
+  const [coverLoading, setCoverLoading] = useState<Set<number>>(new Set());
   const [mode, setMode] = useState<Mode>("console");
+  // modo Console: estante atual e posição dentro de cada estante
+  const [shelfId, setShelfId] = useState("all");
+  const [shelfPos, setShelfPos] = useState<Record<string, number>>({});
+  const [focusId, setFocusId] = useState<number | null>(null);
+  // modo Biblioteca
   const [category, setCategory] = useState(0);
-  const [selected, setSelected] = useState(0);
   const [libraryId, setLibraryId] = useState<number | null>(null);
   const [session, setSession] = useState<LaunchSession | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [info, setInfo] = useState<AppInfo | null>(null);
+  const [soundOn, setSoundOn] = useState(sound.soundEnabled());
   const clock = useClock();
 
   const refresh = useCallback(async () => {
@@ -33,40 +48,100 @@ export default function App() {
     }
   }, []);
 
+  const setLoading = useCallback((id: number, on: boolean) => {
+    setCoverLoading((s) => {
+      if (s.has(id) === on) return s;
+      const n = new Set(s);
+      if (on) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+  }, []);
+
   useEffect(() => {
     refresh();
     sound.playBootWhenAllowed();
-    // Capas baixadas em segundo plano chegam por aqui.
-    const off = backend.onLibraryChanged(() => {
+    // Capas buscadas em segundo plano: começa (spinner) -> chega (library-changed) ou falha.
+    const offLoading = backend.onCoverLoading((id) => setLoading(id, true));
+    const offChanged = backend.onLibraryChanged((id) => {
+      setLoading(id, false);
       backend.listGames().then(setLibrary).catch(() => {});
     });
-    const offMissing = backend.onCoverMissing(({ title, error }) =>
+    const offMissing = backend.onCoverMissing(({ id, title, error }) => {
+      setLoading(id, false);
       setToast(
         error
           ? `Não consegui buscar a capa de ${title} (${error}). Tente de novo ou escolha uma imagem em Biblioteca.`
           : `Não achei a capa de ${title} na internet. Em Biblioteca → "Trocar capa…" você escolhe uma imagem.`,
-      ),
-    );
+      );
+    });
     return () => {
-      off.then((f) => f());
-      offMissing.then((f) => f());
+      for (const off of [offLoading, offChanged, offMissing]) off.then((f) => f());
     };
-  }, [refresh]);
+  }, [refresh, setLoading]);
 
-  // Jogos reais primeiro; os exemplos só aparecem enquanto a estante está vazia.
+  // Jogos reais (os jogados por último primeiro); exemplos só com a estante vazia.
   const games = useMemo<Game[]>(() => {
-    if (library.length) return library.map(fromLibrary);
+    if (library.length) {
+      return [...library]
+        .sort((a, b) => (b.last_played ?? 0) - (a.last_played ?? 0) || b.added_at - a.added_at)
+        .map((g) => ({ ...fromLibrary(g), coverLoading: coverLoading.has(g.id) }));
+    }
     return SAMPLE_GAMES.map((g) => ({ ...g, favorite: g.favorite !== demoFavs.has(g.id) }));
-  }, [library, demoFavs]);
+  }, [library, demoFavs, coverLoading]);
 
-  const list = useMemo(() => {
+  // ---------- estantes do modo Console ----------
+  const systemsPresent = useMemo(
+    () => SYSTEM_ORDER.filter((s) => games.some((g) => g.system === s)),
+    [games],
+  );
+  const shelves = useMemo<Shelf[]>(() => {
+    const list: Shelf[] = [{ id: "all", label: "Todos" }];
+    for (const s of systemsPresent) list.push({ id: s, label: SYSTEMS[s].name, system: s });
+    if (games.some((g) => g.favorite)) list.push({ id: "fav", label: "Favoritos" });
+    return list;
+  }, [systemsPresent, games]);
+
+  const shelf = shelves.find((s) => s.id === shelfId) ?? shelves[0];
+  const shelfItems = useMemo<ShelfItem[]>(() => {
+    const asItems = (list: Game[]): ShelfItem[] => list.map((game) => ({ kind: "game", game }));
+    if (shelf.system) return asItems(games.filter((g) => g.system === shelf.system));
+    if (shelf.id === "fav") return asItems(games.filter((g) => g.favorite));
+    // "Todos": os jogos e, no fim, uma pasta por console (quando há mais de um).
+    const folders: ShelfItem[] =
+      systemsPresent.length > 1
+        ? systemsPresent.map((s) => ({ kind: "folder", system: s, games: games.filter((g) => g.system === s) }))
+        : [];
+    return [...asItems(games), ...folders];
+  }, [shelf, games, systemsPresent]);
+
+  const pos = Math.max(0, Math.min(shelfItems.length - 1, shelfPos[shelf.id] ?? 0));
+  const item = shelfItems[pos];
+
+  // Leva a seleção até um jogo específico (ex.: o que acabou de ser adicionado).
+  useEffect(() => {
+    if (focusId === null) return;
+    const i = shelfItems.findIndex((it) => it.kind === "game" && it.game.id === focusId);
+    if (i >= 0) {
+      setShelfPos((p) => ({ ...p, [shelf.id]: i }));
+      setFocusId(null);
+    }
+  }, [focusId, shelfItems, shelf.id]);
+
+  // ---------- modo Biblioteca ----------
+  const libraryList = useMemo(() => {
     const filtered = games.filter(CATEGORIES[category].filter);
     return filtered.length ? filtered : games;
   }, [games, category]);
 
-  const current = list[Math.min(selected, list.length - 1)];
+  // Jogo "em foco" (dá cor e arte ao fundo).
+  const focusGame: Game | undefined =
+    mode === "console"
+      ? item?.kind === "game"
+        ? item.game
+        : item?.games[0]
+      : (libraryList.find((g) => g.id === libraryId) ?? libraryList[0]);
 
-  // Avisa da BIOS só para consoles que têm jogos na estante (ou PS1, com a estante vazia).
   const missingBios = useMemo(() => {
     if (!info) return [];
     return info.systems
@@ -74,7 +149,7 @@ export default function App() {
       .filter((s) => (library.length ? library.some((g) => g.system === s.id) : s.id === "ps1"))
       .map((s) => s.id.toUpperCase());
   }, [info, library]);
-  const [tint1, tint2] = useCoverColors(current?.coverUrl, [current?.c1 ?? "#3b1a7a", current?.c2 ?? "#ff4fa3"]);
+  const [tint1, tint2] = useCoverColors(focusGame?.coverUrl, [focusGame?.c1 ?? "#3b1a7a", focusGame?.c2 ?? "#ff4fa3"]);
 
   // ---------- eventos do runner ----------
   const sessionRef = useRef(session);
@@ -126,22 +201,19 @@ export default function App() {
       const added = await backend.addGame();
       if (!added) return;
       sound.play("select");
+      // A busca da capa já começou no backend: mostra o carregando desde já.
+      if (!added.cover) setLoading(added.id, true);
       setSession(null);
       setCategory(0);
+      setShelfId(added.system);
       await refresh();
+      setFocusId(added.id);
       setLibraryId(added.id);
-      setToast(`${added.title} entrou na estante`);
+      setToast(`${added.title} entrou na estante de ${SYSTEMS[added.system].name}`);
     } catch (e) {
       setToast(String(e));
     }
-  }, [refresh]);
-
-  // Quando um jogo novo entra, seleciona ele no carrossel.
-  useEffect(() => {
-    if (libraryId === null) return;
-    const i = list.findIndex((g) => g.id === libraryId);
-    if (i >= 0) setSelected(i);
-  }, [libraryId, list]);
+  }, [refresh, setLoading]);
 
   const removeGame = useCallback(
     async (game: Game) => {
@@ -149,7 +221,6 @@ export default function App() {
         await backend.removeGame(game.id);
         sound.play("back");
         setToast(`${game.title} saiu da estante (o arquivo continua no disco)`);
-        setSelected(0);
         await refresh();
       } catch (e) {
         setToast(String(e));
@@ -176,25 +247,36 @@ export default function App() {
     [refresh],
   );
 
+  const goShelf = useCallback((id: string) => {
+    sound.play("nav");
+    setShelfId(id);
+  }, []);
+  const changeShelf = useCallback(
+    (delta: number) => {
+      const i = shelves.findIndex((s) => s.id === shelf.id);
+      goShelf(shelves[(i + delta + shelves.length) % shelves.length].id);
+    },
+    [shelves, shelf.id, goShelf],
+  );
   const changeCategory = useCallback((delta: number) => {
     sound.play("nav");
     setCategory((c) => (c + delta + CATEGORIES.length) % CATEGORIES.length);
-    setSelected(0);
-  }, []);
-  const pickCategory = useCallback((i: number) => {
-    sound.play("nav");
-    setCategory(i);
-    setSelected(0);
   }, []);
   const selectIndex = useCallback(
     (i: number) => {
-      const next = Math.max(0, Math.min(list.length - 1, i));
-      if (next !== selected) sound.play("move");
-      setSelected(next);
+      const next = Math.max(0, Math.min(shelfItems.length - 1, i));
+      if (next !== pos) sound.play("move");
+      setShelfPos((p) => ({ ...p, [shelf.id]: next }));
     },
-    [list.length, selected],
+    [shelfItems.length, pos, shelf.id],
   );
-  const move = useCallback((delta: number) => selectIndex(selected + delta), [selectIndex, selected]);
+  const activate = useCallback(
+    (it: ShelfItem) => {
+      if (it.kind === "game") launch(it.game);
+      else goShelf(it.system);
+    },
+    [launch, goShelf],
+  );
   const switchMode = useCallback((m: Mode) => {
     sound.play("nav");
     setMode(m);
@@ -204,7 +286,6 @@ export default function App() {
     setLibraryId(game.id);
     setMode("library");
   }, []);
-  const [soundOn, setSoundOn] = useState(sound.soundEnabled());
 
   useEffect(() => {
     if (toast) sound.play("pop");
@@ -227,18 +308,23 @@ export default function App() {
         if (e.key === "Escape" || e.key === "Backspace") closeSession();
         return;
       }
-      if (e.key === "q" || e.key === "Q") changeCategory(-1);
-      else if (e.key === "e" || e.key === "E") changeCategory(1);
-      if (mode !== "console" || !current) return;
-      if (e.key === "ArrowRight") move(1);
-      else if (e.key === "ArrowLeft") move(-1);
-      else if (e.key === "Enter") launch(current);
+      const k = e.key.toLowerCase();
+      if (k === "q" || k === "e") {
+        const d = k === "q" ? -1 : 1;
+        if (mode === "console") changeShelf(d);
+        else changeCategory(d);
+        return;
+      }
+      if (mode !== "console" || !item) return;
+      if (e.key === "ArrowRight") selectIndex(pos + 1);
+      else if (e.key === "ArrowLeft") selectIndex(pos - 1);
+      else if (e.key === "Enter") activate(item);
       else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, session, mode, current, move, launch, changeCategory, closeSession]);
+  }, [busy, session, mode, item, pos, selectIndex, activate, changeShelf, changeCategory, closeSession]);
 
   useGamepad((b: PadButton) => {
     if (busy) return;
@@ -247,38 +333,59 @@ export default function App() {
       if (b === "a" && session.phase === "demo") addGame();
       return;
     }
-    if (b === "lb") return changeCategory(-1);
-    if (b === "rb") return changeCategory(1);
+    if (b === "lb" || b === "rb") {
+      const d = b === "lb" ? -1 : 1;
+      return mode === "console" ? changeShelf(d) : changeCategory(d);
+    }
     if (b === "start") return switchMode(mode === "console" ? "library" : "console");
     if (b === "x") return addGame();
-    if (mode !== "console" || !current) return;
-    if (b === "right") move(1);
-    else if (b === "left") move(-1);
-    else if (b === "a") launch(current);
-    else if (b === "y") openDetails(current);
-    else if (b === "b") toggleFavorite(current);
+    if (mode !== "console" || !item) return;
+    if (b === "right") selectIndex(pos + 1);
+    else if (b === "left") selectIndex(pos - 1);
+    else if (b === "a") activate(item);
+    else if (item.kind === "game" && b === "y") openDetails(item.game);
+    else if (item.kind === "game" && b === "b") toggleFavorite(item.game);
+    else if (item.kind === "folder" && b === "b") goShelf("all");
   });
 
   return (
     <div className="app">
-      <Ambient c1={tint1} c2={tint2} art={current?.coverUrl} />
+      <Ambient c1={tint1} c2={tint2} art={focusGame?.coverUrl} />
 
       <header className="top">
         <div className="logo">
           ROX<b>emu</b>
         </div>
-        <nav className="chips" aria-label="Categorias">
-          {CATEGORIES.map((c, i) => (
-            <button
-              key={c.label}
-              className={`chip${i === category ? " on" : ""}`}
-              onClick={() => pickCategory(i)}
-            >
-              {c.label}
-              {i === 0 && <span className="n">{games.length}</span>}
-            </button>
-          ))}
-        </nav>
+        {mode === "console" ? (
+          <nav className="shelves" aria-label="Estantes">
+            {shelves.map((s) => (
+              <button
+                key={s.id}
+                className={`shelf-tab${s.id === shelf.id ? " on" : ""}`}
+                onClick={() => goShelf(s.id)}
+              >
+                {s.system && <i style={{ background: SYSTEMS[s.system].dot }} />}
+                {s.label}
+              </button>
+            ))}
+          </nav>
+        ) : (
+          <nav className="chips" aria-label="Categorias">
+            {CATEGORIES.map((c, i) => (
+              <button
+                key={c.label}
+                className={`chip${i === category ? " on" : ""}`}
+                onClick={() => {
+                  sound.play("nav");
+                  setCategory(i);
+                }}
+              >
+                {c.label}
+                {i === 0 && <span className="n">{games.length}</span>}
+              </button>
+            ))}
+          </nav>
+        )}
         <div className="status">
           <button className="add" onClick={addGame} title="Adicionar jogo (X no controle)">
             + Jogo
@@ -333,16 +440,16 @@ export default function App() {
 
       {mode === "console" ? (
         <ConsoleView
-          games={list}
-          selected={Math.min(selected, list.length - 1)}
+          items={shelfItems}
+          selected={pos}
           onSelect={selectIndex}
-          onLaunch={launch}
+          onActivate={activate}
           onDetails={openDetails}
           onToggleFavorite={toggleFavorite}
         />
       ) : (
         <LibraryView
-          games={list}
+          games={libraryList}
           selectedId={libraryId}
           onSelect={(g) => {
             if (g.id !== libraryId) sound.play("move");
@@ -354,13 +461,14 @@ export default function App() {
           onCover={async (game, kind) => {
             try {
               if (kind === "web") {
+                setLoading(game.id, true);
                 await backend.refreshCover(game.id);
-                setToast(`Procurando a capa de ${game.title}…`);
               } else if (await backend.chooseCover(game.id)) {
                 await refresh();
                 setToast("Capa trocada");
               }
             } catch (e) {
+              setLoading(game.id, false);
               setToast(String(e));
             }
           }}
@@ -369,13 +477,13 @@ export default function App() {
 
       <footer className="hints">
         <div>
-          <span><b className="k a">A</b>Jogar</span>
+          <span><b className="k a">A</b>{item?.kind === "folder" && mode === "console" ? "Abrir pasta" : "Jogar"}</span>
           <span><b className="k y">Y</b>Detalhes</span>
           <span><b className="k x">X</b>Adicionar jogo</span>
           <span><b className="k b">B</b>Favoritar</span>
         </div>
         <div className="r">
-          <span><b className="k">LB</b><b className="k">RB</b>Categoria</span>
+          <span><b className="k">LB</b><b className="k">RB</b>{mode === "console" ? "Estante" : "Categoria"}</span>
           <span><b className="k">≡</b>Trocar modo</span>
         </div>
       </footer>

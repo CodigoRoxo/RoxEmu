@@ -323,6 +323,15 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 - [x] Sons sintetizados na hora (Web Audio, sem arquivos de terceiros): navegar, categoria,
       confirmar, voltar, abrir jogo, erro, favoritar, aviso e boot. Botão para ligar/desligar.
 
+### Modo Console estilo PS5 *(feito em 2026-11-20)*
+- [x] Estantes por console (Todos, PlayStation, PlayStation 2, ..., Favoritos), LB/RB para trocar;
+      cada estante lembra onde parou. "Todos" mostra os jogados por último primeiro.
+- [x] Fileira no topo (selecionado cresce com o nome ao lado), arte em tela cheia, título grande,
+      botão Jogar branco, favorito e "•••". Estrutura do PS5, identidade ROX (sem marcas da Sony).
+- [x] Pastas de console no fim de "Todos" (mosaico de capas) que abrem a estante do console.
+- [x] Carregando estilo iOS em cima da capa enquanto ela é buscada.
+- [x] BIOS do PS2 reconhecida pelo conteúdo (ROM0), não só pelo tamanho.
+
 ### Fase 6 — Além do PS1
 - [ ] Abstração `System`: cada console é um módulo que declara:
   - os formatos aceitos e como abrir cada um (BIN/CUE, ISO, CHD, ZIP, M3U…);

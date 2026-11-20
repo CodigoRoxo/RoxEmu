@@ -56,7 +56,7 @@ export function Ambient({ c1, c2, art }: { c1: string; c2: string; art?: string 
 
   return (
     <div className="bg" aria-hidden="true">
-      {art && <img key={art} className="hero" src={art} alt="" draggable={false} />}
+      {art && <img key={art} className="bg-art" src={art} alt="" draggable={false} />}
       <div className="blob a" style={{ backgroundColor: `color-mix(in srgb, ${c1} 45%, #7c3aed)` }} />
       <div className="blob b" style={{ backgroundColor: `color-mix(in srgb, ${c2} 40%, #db2777)` }} />
       <canvas ref={canvas} />

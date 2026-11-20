@@ -28,6 +28,8 @@ export interface Game {
   path?: string;
   /** Capa de verdade (URL para o <img>), quando já foi baixada. */
   coverUrl?: string;
+  /** A capa está sendo buscada na internet agora. */
+  coverLoading?: boolean;
   /** Cores da capa gerada (substituída pela capa real na Fase 2). */
   c1: string;
   c2: string;

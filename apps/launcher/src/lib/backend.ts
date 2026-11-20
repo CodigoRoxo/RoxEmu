@@ -63,16 +63,24 @@ export const refreshCover = (id: number) => invoke<void>("refresh_cover", { id }
 /** Escolher imagem própria como capa. `false` se cancelar. */
 export const chooseCover = (id: number) => invoke<boolean>("choose_cover", { id });
 
-/** Avisado quando algo muda na biblioteca em segundo plano (ex.: capa baixada). */
-export function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
+/** Avisado quando algo muda na biblioteca em segundo plano (ex.: capa baixada). Recebe o id do jogo. */
+export function onLibraryChanged(cb: (gameId: number) => void): Promise<UnlistenFn> {
   if (!inApp) return Promise.resolve(() => {});
-  return listen("library-changed", () => cb());
+  return listen<number>("library-changed", (e) => cb(e.payload));
+}
+
+/** Avisado quando começa a busca da capa de um jogo. */
+export function onCoverLoading(cb: (gameId: number) => void): Promise<UnlistenFn> {
+  if (!inApp) return Promise.resolve(() => {});
+  return listen<number>("cover-loading", (e) => cb(e.payload));
 }
 
 /** Avisado quando a busca de capa de um jogo não encontrou nada (ou falhou). */
-export function onCoverMissing(cb: (e: { title: string; error: string | null }) => void): Promise<UnlistenFn> {
+export function onCoverMissing(
+  cb: (e: { id: number; title: string; error: string | null }) => void,
+): Promise<UnlistenFn> {
   if (!inApp) return Promise.resolve(() => {});
-  return listen<{ title: string; error: string | null }>("cover-missing", (e) => cb(e.payload));
+  return listen<{ id: number; title: string; error: string | null }>("cover-missing", (e) => cb(e.payload));
 }
 
 /** URL que a interface usa para mostrar um arquivo de capa do disco. */

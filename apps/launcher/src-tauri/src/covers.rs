@@ -10,6 +10,7 @@ use crate::AppState;
 
 #[derive(Clone, serde::Serialize)]
 struct CoverMissing {
+    id: i64,
     title: String,
     error: Option<String>,
 }
@@ -43,6 +44,8 @@ pub fn fetch_in_background(app: &AppHandle, only: Option<i64>, force: bool) {
         }
         let fetcher = CoverFetcher::new(&state.data.covers);
         for game in todo {
+            // A interface mostra o "carregando" em cima da capa até chegar o library-changed.
+            let _ = app.emit("cover-loading", game.id);
             let stem = game
                 .path
                 .file_stem()
@@ -67,6 +70,7 @@ pub fn fetch_in_background(app: &AppHandle, only: Option<i64>, force: bool) {
                 let _ = app.emit(
                     "cover-missing",
                     CoverMissing {
+                        id: game.id,
                         title: game.title.clone(),
                         error,
                     },

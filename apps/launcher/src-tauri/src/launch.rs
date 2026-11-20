@@ -26,8 +26,25 @@ pub enum UiRunnerEvent {
 #[derive(Default)]
 pub struct Running(pub Mutex<Option<i64>>);
 
-/// Acha um arquivo com cara de BIOS do console na pasta (pelo tamanho exato).
-/// Prefere nomes no padrão "scph..." quando houver mais de um.
+/// É a BIOS principal do PS2? Não basta o tamanho: os extratores de BIOS geram vários arquivos
+/// de 4 MB (ROM0 = BIOS, ROM1 = leitor de DVD, DIFF...). A BIOS principal tem a tabela interna
+/// `RESET` + `ROMDIR` depois do código de boot (por volta de 0x2700); a ROM1 tem logo no início.
+pub fn is_ps2_main_bios(path: &Path) -> bool {
+    use std::io::Read;
+    let mut buf = Vec::new();
+    if std::fs::File::open(path)
+        .and_then(|f| f.take(1024 * 1024).read_to_end(&mut buf))
+        .is_err()
+    {
+        return false;
+    }
+    buf.windows(16).enumerate().any(|(i, w)| {
+        i >= 0x1000 && w.starts_with(b"RESET\0") && buf[i + 16..].starts_with(b"ROMDIR")
+    })
+}
+
+/// Acha a BIOS do console na pasta. PS1: pelo tamanho (512 KB). PS2: pelo conteúdo.
+/// Prefere nomes no padrão "scph..." quando houver mais de uma.
 pub fn find_bios(dir: &Path, system: SystemId) -> Option<PathBuf> {
     let size = system.bios_size()?;
     let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
@@ -35,6 +52,7 @@ pub fn find_bios(dir: &Path, system: SystemId) -> Option<PathBuf> {
         .flatten()
         .filter(|e| e.metadata().is_ok_and(|m| m.is_file() && m.len() == size))
         .map(|e| e.path())
+        .filter(|p| system != SystemId::Ps2 || is_ps2_main_bios(p))
         .collect();
     found.sort_by_key(|p| {
         let name = p
@@ -254,5 +272,33 @@ fn record(app: &AppHandle, game_id: i64, played_secs: u64) {
         if let Err(e) = lib.record_session(game_id, played_secs) {
             log::error!("falha ao salvar tempo de jogo: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rom(reset_at: usize) -> Vec<u8> {
+        let mut b = vec![0u8; 4 * 1024 * 1024];
+        b[reset_at..reset_at + 6].copy_from_slice(b"RESET\0");
+        b[reset_at + 16..reset_at + 22].copy_from_slice(b"ROMDIR");
+        b
+    }
+
+    #[test]
+    fn escolhe_rom0_e_ignora_diff_e_rom1() {
+        let dir = std::env::temp_dir().join(format!("rox-bios-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("SCPH-90001.DIFF"), vec![7u8; 4 * 1024 * 1024]).unwrap();
+        std::fs::write(dir.join("SCPH-90001.ROM1"), rom(16)).unwrap();
+        std::fs::write(dir.join("SCPH-90001.ROM0"), rom(0x2780)).unwrap();
+        std::fs::write(dir.join("SCPH1001.BIN"), vec![0u8; 512 * 1024]).unwrap();
+
+        let ps2 = find_bios(&dir, SystemId::Ps2).unwrap();
+        assert!(ps2.to_string_lossy().ends_with("SCPH-90001.ROM0"));
+        let ps1 = find_bios(&dir, SystemId::Ps1).unwrap();
+        assert!(ps1.to_string_lossy().ends_with("SCPH1001.BIN"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

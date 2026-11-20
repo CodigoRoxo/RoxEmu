@@ -273,7 +273,9 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
       controle, memory card salvo, F2/F4 para save state e Espaço para acelerar.
 - [x] Pipeline testado de ponta a ponta com o core real (o jogo abre, a janela aparece e o som sai).
 - [ ] **Teste com BIOS e jogo de verdade** (depende do usuário).
-- [ ] Botão "Jogar" do launcher chamando o runner (primeira versão: escolher o arquivo do jogo).
+- [x] "Adicionar jogo" (seletor de arquivo) com título, região, formato e serial lidos do arquivo.
+- [x] Botão "Jogar" do launcher abre o runner; a estante mostra iniciando / jogando / erro e
+      soma o tempo jogado. Avisa quando falta a BIOS e abre a pasta certa.
 
 **Pronto quando:** um jogo de PS1 vai da tela da BIOS até a gameplay, com som e controle.
 

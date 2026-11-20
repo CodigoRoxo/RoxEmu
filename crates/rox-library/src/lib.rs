@@ -5,6 +5,8 @@
 
 pub mod cue;
 pub mod formats;
+pub mod game;
 pub mod ps1;
 
 pub use formats::{detect_format, GameFormat};
+pub use game::{inspect, GameFile};

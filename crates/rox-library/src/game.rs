@@ -1,0 +1,194 @@
+//! Inspeciona um arquivo de jogo e descobre tudo que a estante precisa mostrar:
+//! console, título, região, formato, tamanho e serial. O usuário só escolhe o arquivo.
+
+use std::path::{Path, PathBuf};
+
+use rox_common::SystemId;
+use serde::Serialize;
+
+use crate::{cue, detect_format, ps1, GameFormat};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GameFile {
+    pub system: SystemId,
+    pub title: String,
+    pub region: Option<String>,
+    pub format: String,
+    pub serial: Option<String>,
+    pub size_bytes: u64,
+    pub discs: u32,
+    /// Arquivo que o core recebe (o .cue, .m3u, .chd...).
+    pub launch_path: PathBuf,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InspectError {
+    #[error("formato não suportado: {0}")]
+    Unsupported(String),
+    #[error("não foi possível ler {0}")]
+    Read(PathBuf),
+}
+
+/// Descobre o console pela extensão. Por enquanto só PS1 tem core no ROXemu.
+pub fn inspect(path: &Path) -> Result<GameFile, InspectError> {
+    let system = SystemId::Ps1;
+    let format = detect_format(system, path).ok_or_else(|| {
+        InspectError::Unsupported(
+            path.extension()
+                .map(|e| e.to_string_lossy().to_string())
+                .unwrap_or_default(),
+        )
+    })?;
+    let meta = std::fs::metadata(path).map_err(|_| InspectError::Read(path.to_path_buf()))?;
+    let dir = path.parent().unwrap_or(Path::new("."));
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (title, region) = parse_name(&stem);
+
+    let mut size = meta.len();
+    let mut discs = 1;
+    let mut serial = None;
+    let label = match format {
+        GameFormat::Cue => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|_| InspectError::Read(path.to_path_buf()))?;
+            let sheet = cue::parse_cue(&text);
+            for f in &sheet.files {
+                size += std::fs::metadata(dir.join(f)).map(|m| m.len()).unwrap_or(0);
+            }
+            serial = sheet
+                .files
+                .first()
+                .and_then(|f| ps1::scan_serial(&dir.join(f)));
+            match sheet.track_count {
+                0 | 1 => "BIN/CUE".to_string(),
+                n => format!("BIN/CUE · {n} faixas"),
+            }
+        }
+        GameFormat::M3u => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|_| InspectError::Read(path.to_path_buf()))?;
+            let entries: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .collect();
+            discs = entries.len().max(1) as u32;
+            if let Some(first) = entries.first() {
+                if let Ok(inner) = inspect(&dir.join(first)) {
+                    serial = inner.serial;
+                }
+            }
+            format!("M3U · {discs} discos")
+        }
+        GameFormat::Iso | GameFormat::Bin => {
+            serial = ps1::scan_serial(path);
+            format.label().to_string()
+        }
+        other => other.label().to_string(),
+    };
+
+    Ok(GameFile {
+        system,
+        title,
+        region,
+        format: label,
+        serial,
+        size_bytes: size,
+        discs,
+        launch_path: path.to_path_buf(),
+    })
+}
+
+/// "Jogo Legal (USA) (Disc 1)" -> ("Jogo Legal", Some("NTSC-U")).
+pub fn parse_name(stem: &str) -> (String, Option<String>) {
+    let mut title = String::new();
+    let mut region = None;
+    let mut depth = 0;
+    let mut tag = String::new();
+    for c in stem.chars() {
+        match c {
+            '(' | '[' => {
+                depth += 1;
+                tag.clear();
+            }
+            ')' | ']' if depth > 0 => {
+                depth -= 1;
+                region = region.or_else(|| region_from_tag(&tag));
+            }
+            _ if depth > 0 => tag.push(c),
+            _ => title.push(c),
+        }
+    }
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    (
+        if title.is_empty() {
+            stem.to_string()
+        } else {
+            title
+        },
+        region,
+    )
+}
+
+fn region_from_tag(tag: &str) -> Option<String> {
+    let t = tag.to_ascii_lowercase();
+    let r = if t.contains("usa") || t == "us" || t.contains("ntsc-u") {
+        "NTSC-U"
+    } else if t.contains("japan") || t == "jp" || t.contains("ntsc-j") {
+        "NTSC-J"
+    } else if t.contains("europe")
+        || t.contains("pal")
+        || ["brazil", "france", "germany", "spain", "italy", "uk"]
+            .iter()
+            .any(|c| t.contains(c))
+    {
+        "PAL"
+    } else {
+        return None;
+    };
+    Some(r.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn separa_titulo_e_regiao() {
+        assert_eq!(
+            parse_name("Jogo Legal (USA) (Disc 1)"),
+            ("Jogo Legal".into(), Some("NTSC-U".into()))
+        );
+        assert_eq!(
+            parse_name("Outro [Japan]"),
+            ("Outro".into(), Some("NTSC-J".into()))
+        );
+        assert_eq!(parse_name("Sem Tag"), ("Sem Tag".into(), None));
+    }
+
+    #[test]
+    fn inspeciona_bin_cue() {
+        let dir = std::env::temp_dir().join(format!("rox-inspect-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut bin = vec![0u8; 40_000];
+        let cnf = b"BOOT = cdrom:\\SLUS_005.94;1\r\n";
+        bin[20_000..20_000 + cnf.len()].copy_from_slice(cnf);
+        std::fs::write(dir.join("Teste (USA).bin"), &bin).unwrap();
+        std::fs::write(
+            dir.join("Teste (USA).cue"),
+            "FILE \"Teste (USA).bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n",
+        )
+        .unwrap();
+
+        let g = inspect(&dir.join("Teste (USA).cue")).unwrap();
+        assert_eq!(g.title, "Teste");
+        assert_eq!(g.region.as_deref(), Some("NTSC-U"));
+        assert_eq!(g.serial.as_deref(), Some("SLUS-00594"));
+        assert_eq!(g.format, "BIN/CUE");
+        assert!(g.size_bytes >= 40_000);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

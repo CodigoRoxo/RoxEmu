@@ -17,3 +17,6 @@ tauri = { version = "2", features = [] }
 serde.workspace = true
 serde_json.workspace = true
 rox-common.workspace = true
+rox-library.workspace = true
+tauri-plugin-dialog = "2"
+log.workspace = true

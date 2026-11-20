@@ -37,8 +37,12 @@ cargo build -p rox-runner --release
 
 ### Rodar um jogo de PS1 (Fase 1)
 
-1. Coloque a BIOS do seu console (ex.: `scph5501.bin`) em `%APPDATA%\ROXemu\bios\`.
-2. Rode:
+1. Coloque a BIOS do seu console (ex.: `scph5501.bin`) em `%APPDATA%\ROXemu\bios\`
+   (o aviso "BIOS do PS1 faltando" no topo do app abre essa pasta).
+2. Compile o runner uma vez: `cargo build -p rox-runner --release`.
+3. No app (`pnpm dev`), clique em **+ Jogo**, escolha o `.cue`/`.chd`/`.m3u` e aperte **Jogar**.
+
+Ou direto pela linha de comando:
 
 ```powershell
 .\target\release\rox-runner.exe --core .\cores\bin\swanstation_libretro.dll --game "D:\Jogos\PS1\Seu Jogo (USA).cue"

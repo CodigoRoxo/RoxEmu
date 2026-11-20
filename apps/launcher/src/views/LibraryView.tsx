@@ -7,15 +7,19 @@ interface Props {
   selectedId: number | null;
   onSelect: (game: Game) => void;
   onLaunch: (game: Game) => void;
+  onAdd: () => void;
+  onRemove: (game: Game) => void;
 }
 
 /** Modo Biblioteca: grade agrupada por console e painel de detalhes. */
-export function LibraryView({ games, selectedId, onSelect, onLaunch }: Props) {
+export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRemove }: Props) {
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return games.filter((g) => !q || g.title.toLowerCase().includes(q) || g.serial.toLowerCase().includes(q));
+    return games.filter(
+      (g) => !q || g.title.toLowerCase().includes(q) || (g.serial ?? "").toLowerCase().includes(q),
+    );
   }, [games, query]);
 
   const groups = useMemo(() => {
@@ -67,6 +71,9 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch }: Props) {
               aria-label="Buscar"
             />
           </label>
+          <button className="btn play small" onClick={onAdd}>
+            + Adicionar jogo
+          </button>
         </div>
 
         {groups.length === 0 && <p className="muted">Nenhum jogo encontrado para “{query}”.</p>}
@@ -74,7 +81,8 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch }: Props) {
           <div className="group" key={system}>
             <h3>
               <i className="dot" style={{ background: SYSTEMS[system].dot }} />
-              {SYSTEMS[system].name} <code>D:\Jogos\{SYSTEMS[system].folder}</code>
+              {SYSTEMS[system].name}
+              {list.every((g) => g.demo) && <code>exemplos</code>}
             </h3>
             <div className="grid">
               {list.map((g) => (
@@ -88,7 +96,7 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch }: Props) {
                   <b>{g.title}</b>
                   <small>
                     <i className={g.playtime ? "" : "never"} />
-                    {g.serial}
+                    {g.serial ?? g.format}
                   </small>
                 </button>
               ))}
@@ -97,12 +105,20 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch }: Props) {
         ))}
       </div>
 
-      {selected && <DetailPanel game={selected} onLaunch={onLaunch} />}
+      {selected && <DetailPanel game={selected} onLaunch={onLaunch} onRemove={onRemove} />}
     </section>
   );
 }
 
-function DetailPanel({ game, onLaunch }: { game: Game; onLaunch: (g: Game) => void }) {
+function DetailPanel({
+  game,
+  onLaunch,
+  onRemove,
+}: {
+  game: Game;
+  onLaunch: (g: Game) => void;
+  onRemove: (g: Game) => void;
+}) {
   const colors = { "--c1": game.c1, "--c2": game.c2 } as CSSProperties;
   const sys = SYSTEMS[game.system];
   return (
@@ -113,8 +129,9 @@ function DetailPanel({ game, onLaunch }: { game: Game; onLaunch: (g: Game) => vo
       </div>
       <h2>{game.title}</h2>
       <div className="tags left">
-        <span className="tag mono">{game.serial}</span>
-        <span className="tag">{game.region}</span>
+        {game.demo && <span className="tag demo">Exemplo</span>}
+        {game.serial && <span className="tag mono">{game.serial}</span>}
+        {game.region && <span className="tag">{game.region}</span>}
         <span className="tag fmt">{game.format}</span>
       </div>
       <div className="prow">
@@ -142,20 +159,24 @@ function DetailPanel({ game, onLaunch }: { game: Game; onLaunch: (g: Game) => vo
         <dt>Última vez</dt>
         <dd>{game.lastPlayed ?? "—"}</dd>
         <dt>Arquivo</dt>
-        <dd className="path">
-          D:\Jogos\{sys.folder}\{game.file}
-        </dd>
+        <dd className="path">{game.path ?? `D:\\Jogos\\${sys.folder}\\${game.file}`}</dd>
       </dl>
       <div className="sub">Jogo</div>
       <div className="mini">
         <button>Configurações</button>
         <button>Controles</button>
         <button>Trapaças</button>
-        <button>
-          Troféus {game.trophies[0]}/{game.trophies[1]}
-        </button>
+        {game.demo ? (
+          <button>
+            Troféus {game.trophies[0]}/{game.trophies[1]}
+          </button>
+        ) : (
+          <button className="danger" onClick={() => onRemove(game)}>
+            Remover da estante
+          </button>
+        )}
       </div>
-      {game.playtime && (
+      {game.playtime && game.demo && (
         <>
           <div className="sub">Save states</div>
           <div className="states" style={colors}>

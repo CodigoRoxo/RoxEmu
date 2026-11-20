@@ -13,7 +13,7 @@ export function Cover({ game }: { game: Game }) {
         <span>ROX</span>
         <span>{SYSTEMS[game.system].folder}</span>
       </div>
-      <span className="rg">{game.region}</span>
+      {game.region && <span className="rg">{game.region}</span>}
       <div className="ct">{game.title}</div>
     </div>
   );

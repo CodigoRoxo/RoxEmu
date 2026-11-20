@@ -91,22 +91,25 @@ export function ConsoleView({ games, selected, onSelect, onLaunch, onDetails, on
         </h1>
         <div className="tags">
           <span className="tag">{SYSTEMS[game.system].name}</span>
-          <span className="tag">{game.region}</span>
-          <span className="tag mono">{game.serial}</span>
+          {game.demo && <span className="tag demo">Exemplo</span>}
+          {game.region && <span className="tag">{game.region}</span>}
+          {game.serial && <span className="tag mono">{game.serial}</span>}
           <span className="tag">{discLabel(game)}</span>
           <span className="tag fmt">{game.format}</span>
           <span className="tag">⏱ {game.playtime ?? "Nunca jogado"}</span>
           {game.lastPlayed && <span className="tag">{game.lastPlayed}</span>}
         </div>
-        <div className="trophy">
-          <span aria-hidden="true">🏆</span>
-          <div className="bar">
-            <i style={{ width: `${total ? (earned / total) * 100 : 0}%` }} />
+        {total > 0 && (
+          <div className="trophy">
+            <span aria-hidden="true">🏆</span>
+            <div className="bar">
+              <i style={{ width: `${(earned / total) * 100}%` }} />
+            </div>
+            <span>
+              {earned} / {total}
+            </span>
           </div>
-          <span>
-            {earned} / {total}
-          </span>
-        </div>
+        )}
         <div className="actions">
           <button className="btn play" onClick={() => onLaunch(game)}>
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -114,7 +117,7 @@ export function ConsoleView({ games, selected, onSelect, onLaunch, onDetails, on
             </svg>
             Jogar
           </button>
-          {game.playtime && (
+          {game.playtime && game.demo && (
             <button className="btn" onClick={() => onLaunch(game, true)}>
               Continuar do save
             </button>

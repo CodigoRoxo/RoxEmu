@@ -1,22 +1,89 @@
 import { SYSTEMS, type Game } from "../data/games";
 import { Cover } from "./Cover";
 
-/** Tela de "iniciando". Na Fase 3 ela some quando o runner avisa que o jogo abriu. */
-export function LaunchOverlay({ game, resume, onClose }: { game: Game; resume: boolean; onClose: () => void }) {
+export type LaunchPhase = "starting" | "playing" | "error" | "demo";
+
+export interface LaunchSession {
+  game: Game;
+  phase: LaunchPhase;
+  message?: string;
+}
+
+interface Props {
+  session: LaunchSession;
+  onClose: () => void;
+  onOpenBios: () => void;
+  onAdd: () => void;
+}
+
+/** Tela sobre a estante enquanto um jogo abre, roda ou dá erro. */
+export function LaunchOverlay({ session, onClose, onOpenBios, onAdd }: Props) {
+  const { game, phase, message } = session;
+  const core = SYSTEMS[game.system].core;
+  const biosMissing = phase === "error" && !!message?.includes("BIOS");
+  const closable = phase !== "starting" && phase !== "playing";
+
   return (
-    <div className="launch" onClick={onClose} role="dialog" aria-label={`Iniciando ${game.title}`}>
-      <div className="box">
+    <div className={`launch ${phase}`} role="dialog" aria-label={game.title} onClick={closable ? onClose : undefined}>
+      <div className="box" onClick={(e) => e.stopPropagation()}>
         <Cover game={game} />
-        <h3>
-          {resume ? "Carregando save de" : "Iniciando"} {game.title}
-        </h3>
-        <div className="bar">
-          <i />
-        </div>
-        <p>
-          {SYSTEMS[game.system].core} · {game.format}. O runner que abre o jogo chega na Fase 1. Aperte B ou Esc para
-          voltar.
-        </p>
+
+        {phase === "starting" && (
+          <>
+            <h3>Iniciando {game.title}</h3>
+            <div className="bar">
+              <i />
+            </div>
+            <p>
+              {core} · {game.format}
+            </p>
+          </>
+        )}
+
+        {phase === "playing" && (
+          <>
+            <h3>Jogando agora</h3>
+            <p>
+              {game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do
+              controle.
+            </p>
+          </>
+        )}
+
+        {phase === "error" && (
+          <>
+            <h3>{biosMissing ? "Falta a BIOS do PlayStation" : "Não deu para abrir o jogo"}</h3>
+            <p className="err">{message}</p>
+            <div className="actions">
+              {biosMissing && (
+                <button className="btn play" onClick={onOpenBios}>
+                  Abrir pasta da BIOS
+                </button>
+              )}
+              <button className="btn" onClick={onClose}>
+                Voltar
+              </button>
+            </div>
+          </>
+        )}
+
+        {phase === "demo" && (
+          <>
+            <h3>{game.title} é só um exemplo</h3>
+            <p>
+              Os jogos da estante são exemplos até você adicionar os seus. Escolha um arquivo de PlayStation (CUE,
+              CHD, ISO, PBP ou M3U) e ele aparece aqui, pronto para jogar.
+            </p>
+            <div className="actions">
+              <button className="btn play" onClick={onAdd}>
+                + Adicionar jogo
+              </button>
+              <button className="btn" onClick={onClose}>
+                Voltar
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

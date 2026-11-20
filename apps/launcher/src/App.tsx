@@ -1,27 +1,45 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ambient } from "./components/Ambient";
-import { LaunchOverlay } from "./components/LaunchOverlay";
-import { CATEGORIES, SAMPLE_GAMES, type Game } from "./data/games";
+import { LaunchOverlay, type LaunchSession } from "./components/LaunchOverlay";
+import { CATEGORIES, SAMPLE_GAMES, fromLibrary, type Game } from "./data/games";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
-import { getAppInfo, type AppInfo } from "./lib/backend";
+import * as backend from "./lib/backend";
+import type { AppInfo, LibraryGame } from "./lib/backend";
 import { ConsoleView } from "./views/ConsoleView";
 import { LibraryView } from "./views/LibraryView";
 
 type Mode = "console" | "library";
 
 export default function App() {
-  const [games, setGames] = useState<Game[]>(SAMPLE_GAMES);
+  const [library, setLibrary] = useState<LibraryGame[]>([]);
+  const [demoFavs, setDemoFavs] = useState<Set<number>>(new Set());
   const [mode, setMode] = useState<Mode>("console");
   const [category, setCategory] = useState(0);
   const [selected, setSelected] = useState(0);
   const [libraryId, setLibraryId] = useState<number | null>(null);
-  const [launching, setLaunching] = useState<{ game: Game; resume: boolean } | null>(null);
+  const [session, setSession] = useState<LaunchSession | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const clock = useClock();
 
-  useEffect(() => {
-    getAppInfo().then(setInfo).catch((e) => console.error("app_info falhou", e));
+  const refresh = useCallback(async () => {
+    try {
+      setLibrary(await backend.listGames());
+      setInfo(await backend.getAppInfo());
+    } catch (e) {
+      setToast(String(e));
+    }
   }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Jogos reais primeiro; os exemplos só aparecem enquanto a estante está vazia.
+  const games = useMemo<Game[]>(() => {
+    if (library.length) return library.map(fromLibrary);
+    return SAMPLE_GAMES.map((g) => ({ ...g, favorite: g.favorite !== demoFavs.has(g.id) }));
+  }, [library, demoFavs]);
 
   const list = useMemo(() => {
     const filtered = games.filter(CATEGORIES[category].filter);
@@ -30,15 +48,100 @@ export default function App() {
 
   const current = list[Math.min(selected, list.length - 1)];
 
+  // ---------- eventos do runner ----------
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  useEffect(() => {
+    const off = backend.onRunnerEvent((ev) => {
+      const s = sessionRef.current;
+      if (!s || s.game.id !== ev.game_id) return;
+      if (ev.kind === "started") setSession({ ...s, phase: "playing" });
+      else if (ev.kind === "exited") {
+        setSession(null);
+        refresh();
+      } else {
+        setSession({ ...s, phase: "error", message: ev.message });
+        refresh();
+      }
+    });
+    return () => {
+      off.then((f) => f());
+    };
+  }, [refresh]);
+
+  // ---------- ações ----------
+  const launch = useCallback(async (game: Game) => {
+    if (game.demo) {
+      setSession({ game, phase: "demo" });
+      return;
+    }
+    setSession({ game, phase: "starting" });
+    try {
+      await backend.launchGame(game.id);
+    } catch (e) {
+      setSession({ game, phase: "error", message: String(e) });
+    }
+  }, []);
+
+  const addGame = useCallback(async () => {
+    try {
+      const added = await backend.addGame();
+      if (!added) return;
+      setSession(null);
+      setCategory(0);
+      await refresh();
+      setLibraryId(added.id);
+      setToast(`${added.title} entrou na estante`);
+    } catch (e) {
+      setToast(String(e));
+    }
+  }, [refresh]);
+
+  // Quando um jogo novo entra, seleciona ele no carrossel.
+  useEffect(() => {
+    if (libraryId === null) return;
+    const i = list.findIndex((g) => g.id === libraryId);
+    if (i >= 0) setSelected(i);
+  }, [libraryId, list]);
+
+  const removeGame = useCallback(
+    async (game: Game) => {
+      try {
+        await backend.removeGame(game.id);
+        setToast(`${game.title} saiu da estante (o arquivo continua no disco)`);
+        setSelected(0);
+        await refresh();
+      } catch (e) {
+        setToast(String(e));
+      }
+    },
+    [refresh],
+  );
+
+  const toggleFavorite = useCallback(
+    async (game: Game) => {
+      if (game.demo) {
+        setDemoFavs((s) => {
+          const n = new Set(s);
+          if (n.has(game.id)) n.delete(game.id);
+          else n.add(game.id);
+          return n;
+        });
+        return;
+      }
+      await backend.setFavorite(game.id, !game.favorite).catch((e) => setToast(String(e)));
+      refresh();
+    },
+    [refresh],
+  );
+
   const changeCategory = useCallback((delta: number) => {
     setCategory((c) => (c + delta + CATEGORIES.length) % CATEGORIES.length);
     setSelected(0);
   }, []);
-  const move = useCallback((delta: number) => setSelected((s) => Math.max(0, Math.min(list.length - 1, s + delta))), [list.length]);
-  const launch = useCallback((game: Game, resume = false) => setLaunching({ game, resume }), []);
-  const toggleFavorite = useCallback(
-    (game: Game) => setGames((gs) => gs.map((g) => (g.id === game.id ? { ...g, favorite: !g.favorite } : g))),
-    [],
+  const move = useCallback(
+    (delta: number) => setSelected((s) => Math.max(0, Math.min(list.length - 1, s + delta))),
+    [list.length],
   );
   const openDetails = useCallback((game: Game) => {
     setLibraryId(game.id);
@@ -46,10 +149,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // ---------- teclado e controle ----------
+  // Enquanto o jogo abre ou roda, a estante ignora o controle (ele é do jogo).
+  const busy = session?.phase === "starting" || session?.phase === "playing";
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (launching) {
-        if (e.key === "Escape" || e.key === "Backspace") setLaunching(null);
+      if (e.target instanceof HTMLInputElement || busy) return;
+      if (session) {
+        if (e.key === "Escape" || e.key === "Backspace") setSession(null);
         return;
       }
       if (e.key === "q" || e.key === "Q") changeCategory(-1);
@@ -63,16 +176,19 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [launching, mode, current, move, launch, changeCategory]);
+  }, [busy, session, mode, current, move, launch, changeCategory]);
 
   useGamepad((b: PadButton) => {
-    if (launching) {
-      if (b === "b") setLaunching(null);
+    if (busy) return;
+    if (session) {
+      if (b === "b") setSession(null);
+      if (b === "a" && session.phase === "demo") addGame();
       return;
     }
     if (b === "lb") return changeCategory(-1);
     if (b === "rb") return changeCategory(1);
     if (b === "start") return setMode((m) => (m === "console" ? "library" : "console"));
+    if (b === "x") return addGame();
     if (mode !== "console" || !current) return;
     if (b === "right") move(1);
     else if (b === "left") move(-1);
@@ -105,20 +221,34 @@ export default function App() {
           ))}
         </nav>
         <div className="status">
+          <button className="add" onClick={addGame} title="Adicionar jogo (X no controle)">
+            + Jogo
+          </button>
           <div className="seg" role="tablist" aria-label="Modo de exibição">
-            <button role="tab" aria-selected={mode === "console"} className={mode === "console" ? "on" : ""} onClick={() => setMode("console")}>
+            <button
+              role="tab"
+              aria-selected={mode === "console"}
+              className={mode === "console" ? "on" : ""}
+              onClick={() => setMode("console")}
+            >
               Console
             </button>
-            <button role="tab" aria-selected={mode === "library"} className={mode === "library" ? "on" : ""} onClick={() => setMode("library")}>
+            <button
+              role="tab"
+              aria-selected={mode === "library"}
+              className={mode === "library" ? "on" : ""}
+              onClick={() => setMode("library")}
+            >
               Biblioteca
             </button>
           </div>
-          <span className="tro hide-s">🏆 1.240</span>
-          <span className="hide-s" title={info ? `Dados em ${info.data.root}` : "Rodando fora do app (navegador)"}>
-            v{info?.version ?? "dev"}
-          </span>
+          {info && !info.ps1_bios && (
+            <button className="bios-warn hide-s" onClick={() => backend.openBiosFolder()} title={info.data.bios}>
+              BIOS do PS1 faltando
+            </button>
+          )}
           <span>{clock}</span>
-          <div className="av" title="Perfil">
+          <div className="av" title={info ? `ROXemu ${info.version} · dados em ${info.data.root}` : "ROXemu"}>
             R
           </div>
         </div>
@@ -134,14 +264,21 @@ export default function App() {
           onToggleFavorite={toggleFavorite}
         />
       ) : (
-        <LibraryView games={list} selectedId={libraryId} onSelect={(g) => setLibraryId(g.id)} onLaunch={launch} />
+        <LibraryView
+          games={list}
+          selectedId={libraryId}
+          onSelect={(g) => setLibraryId(g.id)}
+          onLaunch={launch}
+          onAdd={addGame}
+          onRemove={removeGame}
+        />
       )}
 
       <footer className="hints">
         <div>
           <span><b className="k a">A</b>Jogar</span>
           <span><b className="k y">Y</b>Detalhes</span>
-          <span><b className="k x">X</b>Configurações</span>
+          <span><b className="k x">X</b>Adicionar jogo</span>
           <span><b className="k b">B</b>Favoritar</span>
         </div>
         <div className="r">
@@ -150,7 +287,20 @@ export default function App() {
         </div>
       </footer>
 
-      {launching && <LaunchOverlay game={launching.game} resume={launching.resume} onClose={() => setLaunching(null)} />}
+      {toast && (
+        <div className="toast" role="status" onClick={() => setToast(null)}>
+          {toast}
+        </div>
+      )}
+
+      {session && (
+        <LaunchOverlay
+          session={session}
+          onClose={() => setSession(null)}
+          onOpenBios={() => backend.openBiosFolder().catch((e) => setToast(String(e)))}
+          onAdd={addGame}
+        />
+      )}
     </div>
   );
 }

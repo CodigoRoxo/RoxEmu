@@ -257,10 +257,12 @@ mod tests {
     #[test]
     fn controle_por_tipo() {
         let ds = input_config(PadKind::DualSense).unwrap();
-        assert!(ds.contains("Handler: DualSense\n  Device: DualSense Pad #1"));
+        assert!(ds.contains("Handler: \"DualSense\"\n  Device: \"DualSense Pad #1\""));
+        let ds4 = input_config(PadKind::DualShock4).unwrap();
+        assert!(ds4.contains("Device: \"DS4 Pad #1\""), "o # precisa estar dentro de aspas");
         assert!(ds.contains("    Cross: Cross\n"));
         let xb = input_config(PadKind::Xbox).unwrap();
-        assert!(xb.contains("Device: XInput Pad #1"));
+        assert!(xb.contains("Device: \"XInput Pad #1\""));
         assert!(xb.contains("    Cross: A\n") && xb.contains("    Circle: B\n"));
         assert!(input_config(PadKind::None).is_none());
     }

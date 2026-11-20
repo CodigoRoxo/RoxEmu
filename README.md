@@ -31,8 +31,28 @@ prototypes/           Protótipos visuais em HTML
 pnpm install          # dependências da interface
 pnpm dev              # abre o ROXemu em modo desenvolvimento
 cargo test --workspace
-./cores/build-cores.ps1   # compila o SwanStation a partir do fonte (Fase 1)
+./cores/build-cores.ps1   # compila o SwanStation a partir do fonte
+cargo build -p rox-runner --release
 ```
+
+### Rodar um jogo de PS1 (Fase 1)
+
+1. Coloque a BIOS do seu console (ex.: `scph5501.bin`) em `%APPDATA%\ROXemu\bios\`.
+2. Rode:
+
+```powershell
+.\target\release\rox-runner.exe --core .\cores\bin\swanstation_libretro.dll --game "D:\Jogos\PS1\Seu Jogo (USA).cue"
+```
+
+| Teclado | Controle | PS1 |
+|---|---|---|
+| Setas / WASD | D-pad / analógico | Direcional |
+| K / L / J / I | A / B / X / Y | ✕ / ○ / □ / △ |
+| Q / E · 1 / 3 | LB / RB · LT / RT | L1 / R1 · L2 / R2 |
+| Enter / Backspace | Start / Back | Start / Select |
+| Espaço (segurar) | — | Acelerar |
+| F2 / F4 | — | Salvar / carregar estado |
+| Esc | Guide | Voltar para o ROXemu |
 
 ## Atalhos na interface
 

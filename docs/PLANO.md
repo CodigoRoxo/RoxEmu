@@ -16,6 +16,26 @@
 | **Formato é problema nosso, não do usuário** | O usuário joga o arquivo na pasta e pronto. Se é BIN/CUE, ISO, CHD, PBP, ZIP ou multi-disco, quem resolve é o módulo de cada console. O usuário nunca precisa saber. |
 | **É o SEU console** | O PC liga, o ROXemu abre em tela cheia e tudo funciona só com o controle. É uma experiência de console de verdade, não um "programa de PC". |
 
+### O conceito: um download só, tudo dentro ("o pacotão")
+
+A pessoa baixa **só o ROXemu**. O instalador já traz o launcher, o runner e **os emuladores
+(cores) de todos os consoles**, compilados por nós a partir do código-fonte. Ela não precisa
+procurar emulador em site nenhum: aponta a pasta dos jogos e joga.
+
+```
+ROXemu-Setup.exe
+ ├─ ROXemu.exe            (launcher: estante, biblioteca, configurações)
+ ├─ rox-runner.exe        (roda o jogo)
+ └─ cores/
+     ├─ swanstation_libretro.dll   PS1
+     ├─ snes9x_libretro.dll        SNES   (Fase 6)
+     └─ mgba_libretro.dll          GBA    (Fase 6)
+```
+
+A única coisa que o usuário traz é o que, por lei, não podemos distribuir: **jogos e BIOS**.
+Para o PS1 "funcionar de cara" mesmo sem BIOS, o PCSX-ReARMed (com BIOS emulada, a "HLE")
+pode entrar como plano B automático, já que roda muitos jogos sem BIOS real.
+
 ### O conceito: ROXemu como console próprio
 
 ```
@@ -95,7 +115,7 @@ entra no ROXemu "de graça" ao lado dos outros.
 | UI | **React + TypeScript + Vite** | Ecossistema enorme. A Gamepad API funciona no WebView2. |
 | Animações | **Framer Motion** + CSS | Escala, blur e paralaxe suaves nos cards. |
 | Backend / runner | **Rust** | Segurança de memória perto de código C (cores), ótimo para FFI. |
-| Janela / áudio / input do jogo | **SDL3** (crate `sdl3`) | Suporte de primeira para controles Xbox e DualShock/DualSense. |
+| Janela / áudio / input do jogo | **minifb + cpal + gilrs** (Rust puro) | Sem dependências C para compilar. Na Fase 4, com renderização por GPU, avaliamos migrar a janela para SDL3 ou winit + wgpu. |
 | Banco | **SQLite** (`rusqlite`) | É um arquivo local, sem servidor. |
 | Monorepo | Cargo workspace + **pnpm** | Um repositório para tudo. |
 
@@ -245,13 +265,15 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 
 **Pronto quando:** o `pnpm tauri dev` abre uma janela vazia do ROXemu e o CI está verde.
 
-### Fase 1 — Runner mínimo: o primeiro jogo bootando *(≈ 2–3 semanas)*
-- [ ] `rox-core-host`: carregar a `.dll`, implementar os callbacks libretro (vídeo, áudio, input,
-      environment e log).
-- [ ] `rox-runner`: janela SDL3, upload de framebuffer por software, áudio com resampling e
-      controle e teclado.
-- [ ] Rodar pela linha de comando:
-      `rox-runner --core swanstation --game "C:\Jogos\X.cue" --bios "...\bios"`.
+### Fase 1 — Runner mínimo: o primeiro jogo bootando *(em andamento)*
+- [x] O SwanStation é compilado do fonte pelo `cores/build-cores.ps1`, com o hash registrado.
+- [x] `rox-core-host`: carrega a `.dll` e implementa os callbacks libretro (vídeo, áudio, input,
+      environment, opções do core, save RAM e save states).
+- [x] `rox-runner`: janela com escala 4:3, áudio com resampling e ajuste de ritmo, teclado e
+      controle, memory card salvo, F2/F4 para save state e Espaço para acelerar.
+- [x] Pipeline testado de ponta a ponta com o core real (o jogo abre, a janela aparece e o som sai).
+- [ ] **Teste com BIOS e jogo de verdade** (depende do usuário).
+- [ ] Botão "Jogar" do launcher chamando o runner (primeira versão: escolher o arquivo do jogo).
 
 **Pronto quando:** um jogo de PS1 vai da tela da BIOS até a gameplay, com som e controle.
 

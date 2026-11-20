@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Compila os cores libretro do ROXemu a partir do código-fonte oficial.
 
@@ -30,29 +30,31 @@ New-Item -ItemType Directory -Force $srcDir, $buildDir, $binDir | Out-Null
 function Read-CoreLock([string]$path) {
   $cores = [ordered]@{}
   $current = $null
-  foreach ($raw in Get-Content $path) {
+  foreach ($raw in Get-Content $path -Encoding UTF8) {
     $line = ($raw -replace '\s+#.*$', '').Trim()
     if (-not $line -or $line.StartsWith('#')) { continue }
     if ($line -match '^\[(.+)\]$') { $current = $Matches[1]; $cores[$current] = [ordered]@{ enabled = $true }; continue }
     if ($current -and $line -match '^([A-Za-z0-9_]+)\s*=\s*(.+)$') {
+      $key = $Matches[1]
       $value = $Matches[2].Trim()
       if ($value -match '^"(.*)"$') { $value = $Matches[1] }
       elseif ($value -eq 'true') { $value = $true }
       elseif ($value -eq 'false') { $value = $false }
-      $cores[$current][$Matches[1]] = $value
+      $cores[$current][$key] = $value
     }
   }
   return $cores
 }
 
 function Set-LockHash([string]$name, [string]$hash) {
-  $lines = Get-Content $lockPath
+  $lines = Get-Content $lockPath -Encoding UTF8
   $inside = $false
   for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match '^\[(.+)\]$') { $inside = ($Matches[1] -eq $name) }
     elseif ($inside -and $lines[$i] -match '^sha256\s*=') { $lines[$i] = "sha256 = `"$hash`"" }
   }
-  Set-Content -Path $lockPath -Value $lines -Encoding utf8
+  # UTF-8 sem BOM (TOML não aceita BOM)
+  [System.IO.File]::WriteAllLines($lockPath, [string[]]$lines, (New-Object System.Text.UTF8Encoding $false))
 }
 
 function Find-CMake {

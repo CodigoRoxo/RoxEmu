@@ -81,7 +81,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 
 /* ---------- modo console ---------- */
 .console{flex:1;display:flex;flex-direction:column;min-height:0}
-.stage{position:relative;flex:1;min-height:180px;overflow:hidden;margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)))}
+.stage{position:relative;z-index:0;isolation:isolate;flex:1;min-height:180px;overflow:hidden;margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)))}
 .slot{position:absolute;left:0;top:0;transform-origin:center;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .35s,filter .35s;cursor:pointer;will-change:transform}
 .slot .cover{width:100%;height:100%}
 .slot:not(.sel){filter:brightness(.62) saturate(.85)}

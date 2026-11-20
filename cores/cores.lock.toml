@@ -14,7 +14,7 @@ repo = "https://github.com/libretro/swanstation"
 commit = "631f0fb31b809e0f889d7c551fe695788e39c1d3"
 build = "cmake"
 output = "swanstation_libretro.dll"
-sha256 = ""
+sha256 = "8967a20e656c432e15154e3c0d69055d91c1ccbe62f481fe189a11f4ec28e893"
 
 [beetle-psx-hw]
 description = "PS1 (modo precisão). Mednafen PSX com renderer por hardware."

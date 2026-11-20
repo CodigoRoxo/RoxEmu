@@ -5,10 +5,12 @@
 //! e fontes opcionais (SteamGridDB para hero/logo).
 
 pub mod covers;
+pub mod steamgriddb;
 
 pub use covers::CoverFetcher;
 use rox_common::SystemId;
 use serde::Serialize;
+pub use steamgriddb::{HeroArt, SteamGridDb};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

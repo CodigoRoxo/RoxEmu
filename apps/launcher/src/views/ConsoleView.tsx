@@ -65,7 +65,7 @@ export function ConsoleView({ items, selected, onSelect, onActivate, onDetails, 
       </div>
 
       {item.kind === "game" ? (
-        <GameHero game={item.game} onPlay={() => onActivate(item)} onDetails={onDetails} onToggleFavorite={onToggleFavorite} />
+        <GameHero key={item.game.id} game={item.game} onPlay={() => onActivate(item)} onDetails={onDetails} onToggleFavorite={onToggleFavorite} />
       ) : (
         <FolderHero system={item.system} games={item.games} onOpen={() => onActivate(item)} />
       )}
@@ -106,6 +106,7 @@ function GameHero({
 }) {
   const [earned, total] = game.trophies;
   const ar = useCoverAspect(game);
+  const [logoBroken, setLogoBroken] = useState(false);
   return (
     <div className="hero" key={game.id}>
       <div className="hero-info">
@@ -114,7 +115,13 @@ function GameHero({
           {SYSTEMS[game.system].name}
           {game.demo && <span className="tag demo">Exemplo</span>}
         </div>
-        <h1>{game.title}</h1>
+        {game.logoUrl && !logoBroken ? (
+          <h1 className="has-logo">
+            <img className="hero-logo" src={game.logoUrl} alt={game.title} onError={() => setLogoBroken(true)} />
+          </h1>
+        ) : (
+          <h1>{game.title}</h1>
+        )}
         <div className="hero-meta">
           {[game.region, game.serial, discLabel(game), game.format, game.playtime ? `${game.playtime} jogadas` : "Nunca jogado", game.lastPlayed]
             .filter(Boolean)
@@ -157,9 +164,36 @@ function GameHero({
           </button>
         </div>
       </div>
-      <div className="hero-art" style={{ aspectRatio: ar }}>
-        <Cover game={game} />
-      </div>
+      {game.heroUrl ? (
+        // Com a arte de fundo na tela, a capa vira um card de progresso (como no PS5).
+        <aside className="stats-card">
+          <div className="stats-cover" style={{ aspectRatio: ar }}>
+            <Cover game={game} />
+          </div>
+          <dl>
+            <div>
+              <dt>Tempo jogado</dt>
+              <dd>{game.playtime ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>Última vez</dt>
+              <dd>{game.lastPlayed ?? "Nunca"}</dd>
+            </div>
+            {total > 0 && (
+              <div>
+                <dt>Troféus</dt>
+                <dd>
+                  {earned}/{total}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </aside>
+      ) : (
+        <div className="hero-art" style={{ aspectRatio: ar }}>
+          <Cover game={game} />
+        </div>
+      )}
     </div>
   );
 }

@@ -35,6 +35,9 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .blob.a { width: 55vw; height: 55vw; left: -12vw; top: -18vw; animation: drift 22s ease-in-out infinite alternate; }
 .blob.b { width: 48vw; height: 48vw; right: -14vw; bottom: -20vw; animation: drift 26s ease-in-out infinite alternate-reverse; }
 .bg .bg-art { position: absolute; inset: -8%; width: 116%; height: 116%; object-fit: cover; filter: blur(26px) saturate(1.35); opacity: 0.6; animation: heroIn 0.9s ease; }
+/* arte de fundo em alta resolução (SteamGridDB): nítida, tela inteira */
+.bg .bg-hero { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; animation: heroFade 0.7s ease; }
+@keyframes heroFade { from { opacity: 0; transform: scale(1.03); } }
 /* escurece à esquerda e embaixo, onde ficam o título e os botões (como na home do PS5) */
 .bg::after { content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(90deg, rgba(11, 6, 20, 0.9) 0%, rgba(11, 6, 20, 0.5) 48%, rgba(11, 6, 20, 0.2) 100%),
@@ -149,6 +152,16 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .hero-sys .tag { text-transform: none; letter-spacing: 0; }
 .hero h1 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 4.4vw, 58px); line-height: 1.02; letter-spacing: -1px;
   text-wrap: balance; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+.hero h1.has-logo { line-height: 0; }
+.hero-logo { display: block; max-width: min(480px, 100%); max-height: 150px; object-fit: contain; object-position: left bottom;
+  filter: drop-shadow(0 6px 24px rgba(0, 0, 0, 0.55)); animation: heroUp 0.5s ease; }
+.stats-card { align-self: end; display: flex; gap: 16px; align-items: flex-end; padding: 14px 18px 14px 14px; border-radius: 16px;
+  background: rgba(11, 6, 20, 0.55); border: 1px solid var(--line); backdrop-filter: blur(16px); animation: heroArt 0.5s ease; }
+.stats-cover { height: 120px; width: auto; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.7); }
+.stats-cover .cover { width: 100%; height: 100%; }
+.stats-card dl { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.stats-card dt { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
+.stats-card dd { margin: 2px 0 0; font-family: var(--f-display); font-size: 18px; font-weight: 700; }
 .hero-meta { font-size: 14px; font-weight: 600; color: var(--mist); }
 .hero-actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .play-btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 46px; border-radius: 999px; background: #fff; color: #1a0b2e;
@@ -266,6 +279,37 @@ dd.path { font-family: var(--f-mono); font-size: 11.5px; color: #c4b5fd; user-se
 .launch.error .launch-cover, .launch.demo .launch-cover { animation: none; filter: saturate(0.6); }
 .toast { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 30; max-width: min(640px, 90%); padding: 12px 20px; border-radius: 14px;
   background: rgba(23, 12, 39, 0.92); border: 1px solid var(--line); backdrop-filter: blur(12px); font-weight: 600; text-align: center; animation: fade 0.25s; cursor: pointer; }
+
+/* ---------- configurações ---------- */
+.gear { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: var(--mist); background: rgba(255, 255, 255, 0.06); }
+.gear:hover { color: var(--ink); background: rgba(255, 255, 255, 0.12); }
+.gear svg { width: 18px; height: 18px; }
+.settings-backdrop { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(11, 6, 20, 0.7); backdrop-filter: blur(10px); animation: fade 0.2s; }
+.settings { width: min(620px, 92%); max-height: 88%; overflow: auto; padding: 22px 24px; border-radius: 22px; background: rgba(23, 12, 39, 0.96); border: 1px solid var(--line); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8); }
+.settings header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.settings h2 { margin: 0; font-family: var(--f-display); font-size: 22px; }
+.settings h3 { margin: 0 0 6px; font-size: 15px; }
+.settings p, .settings li { color: var(--mist); line-height: 1.55; font-size: 13.5px; margin: 0 0 8px; }
+.settings ol { padding-left: 20px; margin: 4px 0 12px; }
+.settings b { color: var(--ink); }
+.set-block { padding: 16px 0; border-top: 1px solid var(--line); }
+.set-block.row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.round.small { width: 34px; height: 34px; font-size: 14px; }
+.key-status { margin: 14px 0 8px; font-size: 13px; font-weight: 700; }
+.key-status .ok { color: var(--ok); }
+.key-status .warn { color: var(--gold); }
+.key-field { display: flex; gap: 8px; }
+.key-field input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06); color: var(--ink); font-family: var(--f-mono); font-size: 13px; user-select: text; }
+.key-field input:focus { outline: 2px solid var(--pink); outline-offset: 1px; }
+.key-busy { position: relative; height: 40px; margin-top: 8px; border-radius: 10px; overflow: hidden; }
+.settings .err { color: #ffb4c2; margin-top: 8px; }
+.settings .fine { font-size: 12px; color: var(--dim); margin-top: 12px; }
+.link { padding: 0; margin-top: 8px; font-size: 13px; font-weight: 700; text-decoration: underline; }
+.link.danger { color: #ff9aac; }
+.toggle { flex: none; width: 50px; height: 28px; border-radius: 999px; background: rgba(255, 255, 255, 0.15); position: relative; transition: background 0.2s; }
+.toggle i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.toggle.on { background: linear-gradient(90deg, var(--rox), var(--pink)); }
+.toggle.on i { transform: translateX(22px); }
 
 @media (max-width: 1150px) {
   .library { grid-template-columns: minmax(0, 1fr) 300px; }

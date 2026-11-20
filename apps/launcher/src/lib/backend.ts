@@ -30,6 +30,27 @@ export interface LibraryGame {
   playtime_secs: number;
   favorite: boolean;
   cover: string | null;
+  hero: string | null;
+  logo: string | null;
+  art_from_franchise: boolean;
+}
+
+export interface SettingsView {
+  has_steamgriddb_key: boolean;
+  steamgriddb_key_hint: string | null;
+}
+
+export async function getSettings(): Promise<SettingsView | null> {
+  return inApp ? invoke<SettingsView>("get_settings") : null;
+}
+/** Testa e salva a chave do SteamGridDB (vazia = remove). Lança erro se a chave não funcionar. */
+export const setSteamgriddbKey = (key: string) => invoke<void>("set_steamgriddb_key", { key });
+export const refreshArt = (id: number) => invoke<void>("refresh_art", { id });
+export const openSteamgriddbPage = () => invoke<void>("open_steamgriddb_page");
+
+export function onArtError(cb: (message: string) => void): Promise<UnlistenFn> {
+  if (!inApp) return Promise.resolve(() => {});
+  return listen<string>("art-error", (e) => cb(e.payload));
 }
 
 export type RunnerEvent =

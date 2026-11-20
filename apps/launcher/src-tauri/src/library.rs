@@ -28,6 +28,17 @@ pub struct LibraryGame {
     /// Quando a busca de capa rodou pela última vez (para não insistir toda hora).
     #[serde(default)]
     pub cover_checked_at: Option<u64>,
+    /// Arte de fundo em alta resolução (SteamGridDB).
+    #[serde(default)]
+    pub hero: Option<PathBuf>,
+    /// Logotipo do jogo com fundo transparente.
+    #[serde(default)]
+    pub logo: Option<PathBuf>,
+    /// A arte de fundo é de outro jogo da mesma franquia.
+    #[serde(default)]
+    pub art_from_franchise: bool,
+    #[serde(default)]
+    pub art_checked_at: Option<u64>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -96,6 +107,10 @@ impl Library {
             favorite: false,
             cover: None,
             cover_checked_at: None,
+            hero: None,
+            logo: None,
+            art_from_franchise: false,
+            art_checked_at: None,
         };
         self.data.games.push(game.clone());
         self.save()?;
@@ -121,6 +136,25 @@ impl Library {
                 g.cover = cover;
             }
             g.cover_checked_at = Some(now_secs());
+        }
+        self.save()
+    }
+
+    /// Registra o resultado da busca de arte de fundo e logo.
+    pub fn set_art(
+        &mut self,
+        id: i64,
+        hero: Option<PathBuf>,
+        logo: Option<PathBuf>,
+        from_franchise: bool,
+    ) -> Result<(), String> {
+        if let Some(g) = self.data.games.iter_mut().find(|g| g.id == id) {
+            if hero.is_some() {
+                g.hero = hero;
+                g.logo = logo;
+                g.art_from_franchise = from_franchise;
+            }
+            g.art_checked_at = Some(now_secs());
         }
         self.save()
     }

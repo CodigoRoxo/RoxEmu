@@ -1,10 +1,12 @@
 //! Backend do launcher: comandos que a interface chama via `invoke`.
 
+mod art;
 mod covers;
 mod ini;
 mod launch;
 mod library;
 mod pcsx2;
+mod settings;
 
 use std::sync::Mutex;
 
@@ -14,10 +16,65 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use library::{Library, LibraryGame};
+use settings::SettingsStore;
 
 pub struct AppState {
     pub data: DataDirs,
     pub library: Mutex<Library>,
+    pub settings: Mutex<SettingsStore>,
+}
+
+/// O que a interface pode saber das configurações (a chave em si nunca volta para a tela).
+#[derive(Serialize)]
+struct SettingsView {
+    has_steamgriddb_key: bool,
+    steamgriddb_key_hint: Option<String>,
+}
+
+#[tauri::command]
+fn get_settings(state: State<AppState>) -> Result<SettingsView, String> {
+    let s = state.settings.lock().map_err(|e| e.to_string())?;
+    let key = s.steamgriddb_key();
+    Ok(SettingsView {
+        has_steamgriddb_key: key.is_some(),
+        steamgriddb_key_hint: key.map(|k| format!("••••{}", &k[k.len().saturating_sub(4)..])),
+    })
+}
+
+/// Salva a chave do SteamGridDB (depois de testar) e busca as artes de todos os jogos.
+/// Chave vazia = remove.
+#[tauri::command]
+async fn set_steamgriddb_key(app: AppHandle, key: String) -> Result<(), String> {
+    let key = key.trim().to_string();
+    let state = app.state::<AppState>();
+    if !key.is_empty() {
+        rox_metadata::SteamGridDb::new(&key, &state.data.covers)
+            .check_key()
+            .map_err(|e| e.to_string())?;
+    }
+    {
+        let mut s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.current.steamgriddb_key = (!key.is_empty()).then_some(key);
+        s.save()?;
+    }
+    art::fetch_in_background(&app, None, true);
+    Ok(())
+}
+
+/// Busca de novo a arte de fundo de um jogo.
+#[tauri::command]
+fn refresh_art(app: AppHandle, id: i64) {
+    art::fetch_in_background(&app, Some(id), true);
+}
+
+/// Abre no navegador padrão a página para gerar a chave do SteamGridDB (só esse endereço).
+#[tauri::command]
+fn open_steamgriddb_page() -> Result<(), String> {
+    std::process::Command::new("explorer")
+        .arg("https://www.steamgriddb.com/profile/preferences/api")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Serialize)]
@@ -89,6 +146,7 @@ async fn add_game(app: AppHandle) -> Result<Option<LibraryGame>, String> {
         lib.add(&path)?
     };
     covers::fetch_in_background(&app, Some(game.id), false);
+    art::fetch_in_background(&app, Some(game.id), false);
     Ok(Some(game))
 }
 
@@ -165,6 +223,7 @@ pub fn run() {
     data.ensure()
         .expect("não foi possível criar as pastas do ROXemu");
     let library = Library::open(data.root.join("library.json"));
+    let settings = SettingsStore::open(data.root.join("settings.json"));
     let covers_dir = data.covers.clone();
 
     tauri::Builder::default()
@@ -172,6 +231,7 @@ pub fn run() {
         .manage(AppState {
             data,
             library: Mutex::new(library),
+            settings: Mutex::new(settings),
         })
         .manage(launch::Running::default())
         .setup(move |app| {
@@ -179,6 +239,7 @@ pub fn run() {
             app.asset_protocol_scope()
                 .allow_directory(&covers_dir, true)?;
             covers::fetch_in_background(app.handle(), None, false);
+            art::fetch_in_background(app.handle(), None, false);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -190,7 +251,11 @@ pub fn run() {
             launch_game,
             open_bios_folder,
             refresh_cover,
-            choose_cover
+            choose_cover,
+            get_settings,
+            set_steamgriddb_key,
+            refresh_art,
+            open_steamgriddb_page
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o ROXemu");

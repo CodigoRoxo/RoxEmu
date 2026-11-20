@@ -30,6 +30,12 @@ export interface Game {
   coverUrl?: string;
   /** A capa está sendo buscada na internet agora. */
   coverLoading?: boolean;
+  /** Arte de fundo em alta resolução (2K/4K) para a tela inteira. */
+  heroUrl?: string;
+  /** Logotipo do jogo (fundo transparente), no lugar do título escrito. */
+  logoUrl?: string;
+  /** A arte de fundo é de outro jogo da mesma franquia/personagem. */
+  artFromFranchise?: boolean;
   /** Cores da capa gerada (substituída pela capa real na Fase 2). */
   c1: string;
   c2: string;
@@ -125,6 +131,9 @@ export function fromLibrary(g: LibraryGame): Game {
     file,
     path: g.path,
     coverUrl: g.cover ? fileUrl(g.cover) : undefined,
+    heroUrl: g.hero ? fileUrl(g.hero) : undefined,
+    logoUrl: g.logo ? fileUrl(g.logo) : undefined,
+    artFromFranchise: g.art_from_franchise,
     c1,
     c2,
     motif: MOTIFS[(h >>> 8) % MOTIFS.length],

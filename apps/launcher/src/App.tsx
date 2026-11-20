@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ambient } from "./components/Ambient";
 import { LaunchOverlay, type LaunchSession } from "./components/LaunchOverlay";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { CATEGORIES, SAMPLE_GAMES, SYSTEMS, fromLibrary, type Game, type SystemId } from "./data/games";
 import { useCoverColors } from "./hooks/useCoverColors";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
@@ -37,7 +38,12 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [soundOn, setSoundOn] = useState(sound.soundEnabled());
+  const [showSettings, setShowSettings] = useState(false);
   const clock = useClock();
+  const toggleSound = useCallback(() => {
+    sound.setSoundEnabled(!soundOn);
+    setSoundOn(!soundOn);
+  }, [soundOn]);
 
   const refresh = useCallback(async () => {
     try {
@@ -75,8 +81,9 @@ export default function App() {
           : `Não achei a capa de ${title} na internet. Em Biblioteca → "Trocar capa…" você escolhe uma imagem.`,
       );
     });
+    const offArtError = backend.onArtError((msg) => setToast(`Artes de fundo: ${msg}`));
     return () => {
-      for (const off of [offLoading, offChanged, offMissing]) off.then((f) => f());
+      for (const off of [offLoading, offChanged, offMissing, offArtError]) off.then((f) => f());
     };
   }, [refresh, setLoading]);
 
@@ -303,6 +310,10 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (showSettings) {
+        if (e.key === "Escape") setShowSettings(false);
+        return;
+      }
       if (e.target instanceof HTMLInputElement || busy) return;
       if (session) {
         if (e.key === "Escape" || e.key === "Backspace") closeSession();
@@ -324,10 +335,14 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, session, mode, item, pos, selectIndex, activate, changeShelf, changeCategory, closeSession]);
+  }, [busy, session, mode, item, pos, selectIndex, activate, changeShelf, changeCategory, closeSession, showSettings]);
 
   useGamepad((b: PadButton) => {
     if (busy) return;
+    if (showSettings) {
+      if (b === "b") setShowSettings(false);
+      return;
+    }
     if (session) {
       if (b === "b") closeSession();
       if (b === "a" && session.phase === "demo") addGame();
@@ -350,7 +365,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Ambient c1={tint1} c2={tint2} art={focusGame?.coverUrl} />
+      <Ambient c1={tint1} c2={tint2} art={focusGame?.coverUrl} hero={focusGame?.heroUrl} />
 
       <header className="top">
         <div className="logo">
@@ -418,13 +433,24 @@ export default function App() {
             </button>
           )}
           <button
+            className="gear"
+            aria-label="Configurações"
+            title="Configurações"
+            onClick={() => {
+              sound.play("select");
+              setShowSettings(true);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-2.7-1.1l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.6 1.6 0 003 15.4H3a2 2 0 110-4h.1a1.6 1.6 0 001.1-2.7l-.1-.1a2 2 0 112.8-2.8l.1.1A1.6 1.6 0 009.6 4V3a2 2 0 114 0v.1a1.6 1.6 0 002.7 1.1l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 001.1 2.7H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1.3z" />
+            </svg>
+          </button>
+          <button
             className={`sound${soundOn ? "" : " off"}`}
             aria-label={soundOn ? "Desligar sons" : "Ligar sons"}
             title={soundOn ? "Desligar sons" : "Ligar sons"}
-            onClick={() => {
-              sound.setSoundEnabled(!soundOn);
-              setSoundOn(!soundOn);
-            }}
+            onClick={toggleSound}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none" />
@@ -492,6 +518,21 @@ export default function App() {
         <div className="toast" role="status" onClick={() => setToast(null)}>
           {toast}
         </div>
+      )}
+
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => {
+            sound.play("back");
+            setShowSettings(false);
+          }}
+          onSaved={(msg) => {
+            setToast(msg);
+            refresh();
+          }}
+          soundOn={soundOn}
+          onToggleSound={toggleSound}
+        />
       )}
 
       {session && (

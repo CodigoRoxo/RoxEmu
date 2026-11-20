@@ -285,7 +285,9 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 - [x] Download e cache das capas (libretro-thumbnails): ao adicionar o jogo e ao abrir o app,
       com nova tentativa e plano B quando a API do GitHub falha; capa também vira o fundo da tela.
 - [x] Trocar capa por uma imagem própria e "Buscar capa na web" de novo.
-- [ ] Hero e logo opcionais (SteamGridDB).
+- [x] Hero 2K/4K e logo do SteamGridDB (chave pessoal do usuário nas Configurações). Sem hero do
+      próprio jogo, usa o da franquia/personagem mais recente (ex.: Spider-Man do PS1 → Spider-Man novo).
+      Com hero: fundo nítido em tela cheia, logo no lugar do título e card de progresso à direita.
 - [ ] SQLite, mais comandos Tauri para listar, buscar e atualizar.
 
 **Pronto quando:** apontar uma pasta → todos os jogos aparecem com nome certo e capa.

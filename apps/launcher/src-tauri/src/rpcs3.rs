@@ -146,8 +146,9 @@ fn input_config(pad: PadKind) -> Option<String> {
     };
     let mut yml = String::from("# Gerado pelo ROXemu a partir do controle conectado.\n");
     yml.push_str("Player 1 Input:\n");
+    // Aspas obrigatórias: em YAML " #" começa um comentário, e "DS4 Pad #1" virava "DS4 Pad".
     yml.push_str(&format!(
-        "  Handler: {handler}\n  Device: {device}\n  Config:\n"
+        "  Handler: \"{handler}\"\n  Device: \"{device}\"\n  Config:\n"
     ));
     for (stick, axis) in [
         ("Left Stick Left", "LS X-"),
@@ -259,7 +260,10 @@ mod tests {
         let ds = input_config(PadKind::DualSense).unwrap();
         assert!(ds.contains("Handler: \"DualSense\"\n  Device: \"DualSense Pad #1\""));
         let ds4 = input_config(PadKind::DualShock4).unwrap();
-        assert!(ds4.contains("Device: \"DS4 Pad #1\""), "o # precisa estar dentro de aspas");
+        assert!(
+            ds4.contains("Device: \"DS4 Pad #1\""),
+            "o # precisa estar dentro de aspas"
+        );
         assert!(ds.contains("    Cross: Cross\n"));
         let xb = input_config(PadKind::Xbox).unwrap();
         assert!(xb.contains("Device: \"XInput Pad #1\""));

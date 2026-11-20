@@ -32,6 +32,7 @@ export interface LibraryGame {
   cover: string | null;
   hero: string | null;
   logo: string | null;
+  icon: string | null;
   art_from_franchise: boolean;
 }
 

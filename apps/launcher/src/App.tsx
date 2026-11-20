@@ -426,7 +426,7 @@ export default function App() {
   });
 
   return (
-    <div className="app">
+    <div className={`app mode-${mode}`}>
       <Ambient c1={tint1} c2={tint2} art={focusGame?.coverUrl} hero={focusGame?.heroUrl} />
 
       <header className="top">
@@ -464,8 +464,10 @@ export default function App() {
           </nav>
         )}
         <div className="status">
-          <button className="add" onClick={addGame} title="Adicionar jogo (X no controle)">
-            + Jogo
+          <button className="gear add-round" onClick={addGame} aria-label="Adicionar jogo" title="Adicionar jogo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+            </svg>
           </button>
           <div className="seg" role="tablist" aria-label="Modo de exibição">
             <button

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Cover } from "../components/Cover";
-import { sizeForHeight, useCoverAspect } from "../hooks/useCoverAspect";
+import { Cover, IosSpinner } from "../components/Cover";
+import { useCoverAspect } from "../hooks/useCoverAspect";
 import { SYSTEMS, discLabel, type Game, type SystemId } from "../data/games";
 
 /** Um item da fileira: um jogo, ou uma pasta de console (na estante "Todos"). */
@@ -14,10 +14,6 @@ interface Props {
   onDetails: (game: Game) => void;
   onToggleFavorite: (game: Game) => void;
 }
-
-/** Altura das capas na fileira; a largura vem do formato de cada capa. */
-const TILE_H = 118;
-const TILE_SEL_H = 150;
 
 /**
  * Modo Console, no espírito da home do PS5: fileira de jogos no topo (o selecionado cresce e
@@ -73,22 +69,37 @@ export function ConsoleView({ items, selected, onSelect, onActivate, onDetails, 
   );
 }
 
+/**
+ * Ícone da fileira: sempre quadrado e do mesmo tamanho, como no PS5 (só o selecionado cresce).
+ * Usa a arte quadrada do jogo; sem ela, a capa mostrando a parte de cima (onde fica o título).
+ */
 function Tile({ item, selected, onClick }: { item: ShelfItem; selected: boolean; onClick: () => void }) {
-  const ar = useCoverAspect(item.kind === "game" ? item.game : undefined);
-  const size = sizeForHeight(item.kind === "game" ? ar : 1, selected ? TILE_SEL_H : TILE_H);
   const label = item.kind === "game" ? item.game.title : SYSTEMS[item.system].name;
+  const [iconBroken, setIconBroken] = useState(false);
+  let content;
+  if (item.kind === "folder") {
+    content = <FolderArt system={item.system} games={item.games} />;
+  } else if (item.game.iconUrl && !iconBroken) {
+    content = (
+      <div className="tile-icon">
+        <img src={item.game.iconUrl} alt="" draggable={false} onError={() => setIconBroken(true)} />
+        {item.game.coverLoading && <IosSpinner />}
+      </div>
+    );
+  } else {
+    content = <Cover game={item.game} />;
+  }
   return (
     <div className={`tile-slot${selected ? " sel" : ""}`}>
       <button
         className={`tile${selected ? " sel" : ""}${item.kind === "folder" ? " folder" : ""}`}
-        style={size}
         aria-label={label}
+        title={label}
         tabIndex={selected ? 0 : -1}
         onClick={onClick}
       >
-        {item.kind === "game" ? <Cover game={item.game} /> : <FolderArt system={item.system} games={item.games} />}
+        {content}
       </button>
-      {selected && <span className="tile-name">{label}</span>}
     </div>
   );
 }

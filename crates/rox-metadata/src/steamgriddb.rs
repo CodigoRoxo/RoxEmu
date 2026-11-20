@@ -22,6 +22,8 @@ const API: &str = "https://www.steamgriddb.com/api/v2";
 pub struct HeroArt {
     pub hero: Option<PathBuf>,
     pub logo: Option<PathBuf>,
+    /// Arte quadrada do jogo, para os ícones da fileira (como no PS5).
+    pub icon: Option<PathBuf>,
     /// Nome do jogo no SteamGridDB de onde veio a arte.
     pub source_name: Option<String>,
     /// A arte é de outro jogo da franquia (plano B), não do próprio jogo.
@@ -92,14 +94,28 @@ impl SteamGridDb {
         Ok(parse_search(&json))
     }
 
-    /// URL da melhor imagem de um tipo ("heroes" ou "logos") para o jogo.
+    /// URL da melhor imagem de um tipo ("heroes", "logos" ou "grids" quadradas) para o jogo.
     fn best_image(&self, kind: &str, game_id: u64) -> Result<Option<String>, CoverError> {
         let query = match kind {
             "heroes" => "?dimensions=3840x1240,1920x620&types=static&nsfw=false&humor=false",
+            "grids" => "?dimensions=1024x1024,512x512&types=static&nsfw=false&humor=false",
             _ => "?types=static&nsfw=false&humor=false",
         };
         let json = self.get_json(&format!("/{kind}/game/{game_id}{query}"))?;
         Ok(parse_first_url(&json))
+    }
+
+    fn fetch_kind(
+        &self,
+        kind: &str,
+        game_id: u64,
+        sub: &str,
+        key: &str,
+    ) -> Result<Option<PathBuf>, CoverError> {
+        match self.best_image(kind, game_id)? {
+            Some(url) => self.download(&url, sub, key).map(Some),
+            None => Ok(None),
+        }
     }
 
     fn download(&self, url: &str, sub: &str, name: &str) -> Result<PathBuf, CoverError> {
@@ -130,10 +146,15 @@ impl SteamGridDb {
         Ok(out)
     }
 
-    /// Procura e baixa hero e logo para o jogo. `file_key` nomeia os arquivos salvos.
+    /// Procura e baixa hero, logo e ícone quadrado. `file_key` nomeia os arquivos salvos.
+    ///
+    /// Logo e ícone vêm sempre do **próprio** jogo (são a "identidade" dele). Só a arte de fundo
+    /// pode vir de outro jogo da franquia, quando o próprio não tem.
     pub fn fetch(&self, title: &str, file_key: &str) -> Result<HeroArt, CoverError> {
         let wanted = normalize_title(title);
         let mut tried = std::collections::HashSet::new();
+        let mut art = HeroArt::default();
+        let mut identity_done = false;
 
         for (round, term) in search_terms(title).iter().enumerate() {
             let results = self.search(term)?;
@@ -141,19 +162,14 @@ impl SteamGridDb {
                 if !tried.insert(game.id) {
                     continue;
                 }
-                let Some(hero_url) = self.best_image("heroes", game.id)? else {
-                    continue;
-                };
                 let exact = normalize_title(&game.name) == wanted;
-                let hero = self.download(&hero_url, "heroes", file_key)?;
-                // Logo só quando a arte é do próprio jogo.
-                let logo = if exact {
-                    match self.best_image("logos", game.id)? {
-                        Some(url) => Some(self.download(&url, "logos", file_key)?),
-                        None => None,
-                    }
-                } else {
-                    None
+                if exact && !identity_done {
+                    identity_done = true;
+                    art.logo = self.fetch_kind("logos", game.id, "logos", file_key)?;
+                    art.icon = self.fetch_kind("grids", game.id, "icons", file_key)?;
+                }
+                let Some(hero) = self.fetch_kind("heroes", game.id, "heroes", file_key)? else {
+                    continue;
                 };
                 log::info!(
                     "arte de {title}: {} ({})",
@@ -164,15 +180,13 @@ impl SteamGridDb {
                         "da franquia"
                     }
                 );
-                return Ok(HeroArt {
-                    hero: Some(hero),
-                    logo,
-                    source_name: Some(game.name),
-                    from_franchise: !exact,
-                });
+                art.hero = Some(hero);
+                art.source_name = Some(game.name);
+                art.from_franchise = !exact;
+                return Ok(art);
             }
         }
-        Ok(HeroArt::default())
+        Ok(art)
     }
 }
 

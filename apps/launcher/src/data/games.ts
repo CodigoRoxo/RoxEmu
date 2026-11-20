@@ -36,6 +36,8 @@ export interface Game {
   logoUrl?: string;
   /** A arte de fundo é de outro jogo da mesma franquia/personagem. */
   artFromFranchise?: boolean;
+  /** Arte quadrada para o ícone da fileira (como no PS5). */
+  iconUrl?: string;
   /** Cores da capa gerada (substituída pela capa real na Fase 2). */
   c1: string;
   c2: string;
@@ -134,6 +136,7 @@ export function fromLibrary(g: LibraryGame): Game {
     heroUrl: g.hero ? fileUrl(g.hero) : undefined,
     logoUrl: g.logo ? fileUrl(g.logo) : undefined,
     artFromFranchise: g.art_from_franchise,
+    iconUrl: g.icon ? fileUrl(g.icon) : undefined,
     c1,
     c2,
     motif: MOTIFS[(h >>> 8) % MOTIFS.length],

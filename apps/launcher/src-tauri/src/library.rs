@@ -39,7 +39,17 @@ pub struct LibraryGame {
     pub art_from_franchise: bool,
     #[serde(default)]
     pub art_checked_at: Option<u64>,
+    /// Arte quadrada para o ícone da fileira (SteamGridDB).
+    #[serde(default)]
+    pub icon: Option<PathBuf>,
+    /// Versão da busca de artes que já rodou para o jogo. Quando a busca ganha algo novo
+    /// (ex.: ícones na versão 2), os jogos antigos são buscados de novo automaticamente.
+    #[serde(default)]
+    pub art_version: u32,
 }
+
+/// Versão atual da busca de artes (2 = hero + logo + ícone quadrado).
+pub const ART_VERSION: u32 = 2;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct LibraryFile {
@@ -111,6 +121,8 @@ impl Library {
             logo: None,
             art_from_franchise: false,
             art_checked_at: None,
+            icon: None,
+            art_version: 0,
         };
         self.data.games.push(game.clone());
         self.save()?;
@@ -141,20 +153,20 @@ impl Library {
     }
 
     /// Registra o resultado da busca de arte de fundo e logo.
-    pub fn set_art(
-        &mut self,
-        id: i64,
-        hero: Option<PathBuf>,
-        logo: Option<PathBuf>,
-        from_franchise: bool,
-    ) -> Result<(), String> {
+    pub fn set_art(&mut self, id: i64, art: rox_metadata::HeroArt) -> Result<(), String> {
         if let Some(g) = self.data.games.iter_mut().find(|g| g.id == id) {
-            if hero.is_some() {
-                g.hero = hero;
-                g.logo = logo;
-                g.art_from_franchise = from_franchise;
+            if art.hero.is_some() {
+                g.hero = art.hero;
+                g.art_from_franchise = art.from_franchise;
+            }
+            if art.logo.is_some() {
+                g.logo = art.logo;
+            }
+            if art.icon.is_some() {
+                g.icon = art.icon;
             }
             g.art_checked_at = Some(now_secs());
+            g.art_version = ART_VERSION;
         }
         self.save()
     }

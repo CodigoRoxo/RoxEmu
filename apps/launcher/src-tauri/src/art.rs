@@ -5,13 +5,17 @@ use rox_metadata::steamgriddb::file_key;
 use rox_metadata::SteamGridDb;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::library::{now_secs, LibraryGame};
+use crate::library::{now_secs, LibraryGame, ART_VERSION};
 use crate::AppState;
 
 /// Sem arte encontrada: tenta de novo sozinho depois de 7 dias.
 const RETRY_AFTER_SECS: u64 = 7 * 24 * 3600;
 
 fn needs_art(g: &LibraryGame) -> bool {
+    // Busca nova versão (ex.: ícones quadrados) para jogos que só tinham a busca antiga.
+    if g.art_version < ART_VERSION {
+        return true;
+    }
     g.hero.as_ref().is_none_or(|p| !p.exists())
         && g.art_checked_at
             .is_none_or(|t| now_secs().saturating_sub(t) > RETRY_AFTER_SECS)
@@ -54,7 +58,7 @@ pub fn fetch_in_background(app: &AppHandle, only: Option<i64>, force: bool) {
                 }
             };
             if let Ok(mut lib) = state.library.lock() {
-                let _ = lib.set_art(game.id, art.hero, art.logo, art.from_franchise);
+                let _ = lib.set_art(game.id, art);
             }
             let _ = app.emit("library-changed", game.id);
         }

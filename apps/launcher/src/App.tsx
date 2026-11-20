@@ -5,6 +5,12 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { CATEGORIES, SAMPLE_GAMES, SYSTEMS, fromLibrary, type Game, type SystemId } from "./data/games";
 import { useCoverColors } from "./hooks/useCoverColors";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
+import { usePadStyle } from "./hooks/usePadStyle";
+import { PadGlyph } from "./components/PadGlyph";
+import { gridOrder } from "./views/LibraryView";
+
+/** Ações da interface, iguais para teclado e controle. */
+type UiAction = "left" | "right" | "up" | "down" | "confirm" | "back" | "details" | "fav" | "prev" | "next" | "options" | "create";
 import * as backend from "./lib/backend";
 import type { AppInfo, LibraryGame } from "./lib/backend";
 import * as sound from "./lib/sounds";
@@ -39,6 +45,7 @@ export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [soundOn, setSoundOn] = useState(sound.soundEnabled());
   const [showSettings, setShowSettings] = useState(false);
+  const { style: padStyle, pref: padPref, setPref: setPadPref, detected: padDetected } = usePadStyle();
   const clock = useClock();
   const toggleSound = useCallback(() => {
     sound.setSoundEnabled(!soundOn);
@@ -308,59 +315,114 @@ export default function App() {
   // Enquanto o jogo abre ou roda, a estante ignora o controle (ele é do jogo).
   const busy = session?.phase === "starting" || session?.phase === "playing";
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (showSettings) {
-        if (e.key === "Escape") setShowSettings(false);
-        return;
-      }
-      if (e.target instanceof HTMLInputElement || busy) return;
-      if (session) {
-        if (e.key === "Escape" || e.key === "Backspace") closeSession();
-        return;
-      }
-      const k = e.key.toLowerCase();
-      if (k === "q" || k === "e") {
-        const d = k === "q" ? -1 : 1;
-        if (mode === "console") changeShelf(d);
-        else changeCategory(d);
-        return;
-      }
-      if (mode !== "console" || !item) return;
-      if (e.key === "ArrowRight") selectIndex(pos + 1);
-      else if (e.key === "ArrowLeft") selectIndex(pos - 1);
-      else if (e.key === "Enter") activate(item);
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [busy, session, mode, item, pos, selectIndex, activate, changeShelf, changeCategory, closeSession, showSettings]);
+  // Navegação da Biblioteca pelo controle: anda pela grade na ordem em que ela aparece.
+  const libraryNav = useCallback(
+    (dir: "left" | "right" | "up" | "down") => {
+      const ordered = gridOrder(libraryList);
+      if (!ordered.length) return;
+      const cur = Math.max(0, ordered.findIndex((g) => g.id === libraryId));
+      const grid = document.querySelector<HTMLElement>(".library .grid");
+      const cols = grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 4;
+      const step = { left: -1, right: 1, up: -cols, down: cols }[dir];
+      const next = Math.max(0, Math.min(ordered.length - 1, cur + step));
+      if (next !== cur) sound.play("move");
+      setLibraryId(ordered[next].id);
+    },
+    [libraryList, libraryId],
+  );
 
-  useGamepad((b: PadButton) => {
+  /**
+   * Uma ação só para teclado e controle (botões no padrão do PS5):
+   * ✕ confirma · ○ volta · △ detalhes · □ favorito · L1/R1 estante · Options modo · Create jogo.
+   */
+  const dispatch = (a: UiAction) => {
     if (busy) return;
     if (showSettings) {
-      if (b === "b") setShowSettings(false);
+      if (a === "back") {
+        sound.play("back");
+        setShowSettings(false);
+      }
       return;
     }
     if (session) {
-      if (b === "b") closeSession();
-      if (b === "a" && session.phase === "demo") addGame();
+      if (a === "back" || (a === "confirm" && session.phase === "error")) closeSession();
+      else if (a === "confirm" && session.phase === "demo") addGame();
       return;
     }
-    if (b === "lb" || b === "rb") {
-      const d = b === "lb" ? -1 : 1;
+    if (a === "prev" || a === "next") {
+      const d = a === "prev" ? -1 : 1;
       return mode === "console" ? changeShelf(d) : changeCategory(d);
     }
-    if (b === "start") return switchMode(mode === "console" ? "library" : "console");
-    if (b === "x") return addGame();
-    if (mode !== "console" || !item) return;
-    if (b === "right") selectIndex(pos + 1);
-    else if (b === "left") selectIndex(pos - 1);
-    else if (b === "a") activate(item);
-    else if (item.kind === "game" && b === "y") openDetails(item.game);
-    else if (item.kind === "game" && b === "b") toggleFavorite(item.game);
-    else if (item.kind === "folder" && b === "b") goShelf("all");
+    if (a === "options") return switchMode(mode === "console" ? "library" : "console");
+    if (a === "create") return addGame();
+
+    if (mode === "library") {
+      const sel = libraryList.find((g) => g.id === libraryId) ?? gridOrder(libraryList)[0];
+      if (a === "left" || a === "right" || a === "up" || a === "down") libraryNav(a);
+      else if (a === "confirm" && sel) launch(sel);
+      else if (a === "fav" && sel) toggleFavorite(sel);
+      else if (a === "back") switchMode("console");
+      return;
+    }
+
+    if (!item) return;
+    if (a === "right") selectIndex(pos + 1);
+    else if (a === "left") selectIndex(pos - 1);
+    else if (a === "confirm") activate(item);
+    else if (a === "details" && item.kind === "game") openDetails(item.game);
+    else if (a === "fav" && item.kind === "game") toggleFavorite(item.game);
+    else if (a === "back") {
+      // ○ volta: de uma estante de console para "Todos"; em "Todos", para o começo da fileira.
+      if (shelf.id !== "all") goShelf("all");
+      else if (pos > 0) selectIndex(0);
+    }
+  };
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
+
+  useEffect(() => {
+    const KEYS: Record<string, UiAction> = {
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      ArrowUp: "up",
+      ArrowDown: "down",
+      Enter: "confirm",
+      Escape: "back",
+      Backspace: "back",
+      q: "prev",
+      e: "next",
+      f: "fav",
+      i: "details",
+      Tab: "options",
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLInputElement;
+      if (typing && e.key !== "Escape") return;
+      const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+      if (!a) return;
+      e.preventDefault();
+      dispatchRef.current(a);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useGamepad((b: PadButton) => {
+    const PAD: Record<PadButton, UiAction> = {
+      a: "confirm",
+      b: "back",
+      y: "details",
+      x: "fav",
+      lb: "prev",
+      rb: "next",
+      start: "options",
+      select: "create",
+      left: "left",
+      right: "right",
+      up: "up",
+      down: "down",
+    };
+    dispatchRef.current(PAD[b]);
   });
 
   return (
@@ -503,14 +565,39 @@ export default function App() {
 
       <footer className="hints">
         <div>
-          <span><b className="k a">A</b>{item?.kind === "folder" && mode === "console" ? "Abrir pasta" : "Jogar"}</span>
-          <span><b className="k y">Y</b>Detalhes</span>
-          <span><b className="k x">X</b>Adicionar jogo</span>
-          <span><b className="k b">B</b>Favoritar</span>
+          <span>
+            <PadGlyph action="confirm" style={padStyle} />
+            {item?.kind === "folder" && mode === "console" ? "Abrir pasta" : "Jogar"}
+          </span>
+          <span>
+            <PadGlyph action="back" style={padStyle} />
+            Voltar
+          </span>
+          {mode === "console" && (
+            <span>
+              <PadGlyph action="details" style={padStyle} />
+              Detalhes
+            </span>
+          )}
+          <span>
+            <PadGlyph action="fav" style={padStyle} />
+            Favoritar
+          </span>
         </div>
         <div className="r">
-          <span><b className="k">LB</b><b className="k">RB</b>{mode === "console" ? "Estante" : "Categoria"}</span>
-          <span><b className="k">≡</b>Trocar modo</span>
+          <span>
+            <PadGlyph action="l1" style={padStyle} />
+            <PadGlyph action="r1" style={padStyle} />
+            {mode === "console" ? "Estante" : "Categoria"}
+          </span>
+          <span>
+            <PadGlyph action="create" style={padStyle} />
+            Adicionar jogo
+          </span>
+          <span>
+            <PadGlyph action="options" style={padStyle} />
+            {mode === "console" ? "Biblioteca" : "Console"}
+          </span>
         </div>
       </footer>
 
@@ -532,6 +619,9 @@ export default function App() {
           }}
           soundOn={soundOn}
           onToggleSound={toggleSound}
+          padPref={padPref}
+          padDetected={padDetected}
+          onPadPref={setPadPref}
         />
       )}
 

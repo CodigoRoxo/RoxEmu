@@ -68,15 +68,19 @@ Ou direto pela linha de comando:
 
 ## Atalhos na interface
 
-| Teclado | Controle | Ação |
-|---|---|---|
-| ← → | Direcional / analógico | Navegar entre jogos |
-| Enter | A | Jogar |
-| Q / E | LB / RB | Trocar categoria |
-| — | Y | Detalhes |
-| — | B | Favoritar |
-| — | Start | Alternar Console / Biblioteca |
-| Esc | B | Fechar a tela de "iniciando" |
+Padrão do PS5: ✕ confirma e ○ volta. Os símbolos na tela seguem o controle conectado
+(PlayStation ou Xbox) e podem ser fixados em Configurações.
+
+| Teclado | PlayStation | Xbox | Ação |
+|---|---|---|---|
+| Setas | Direcional / analógico (segurar repete) | D-pad / analógico | Navegar (fileira e grade da Biblioteca) |
+| Enter | ✕ | A | Jogar / confirmar / abrir pasta |
+| Esc / Backspace | ○ | B | Voltar (fecha telas, volta para "Todos", sai da Biblioteca) |
+| I | △ | Y | Detalhes do jogo |
+| F | □ | X | Favoritar |
+| Q / E | L1 / R1 | LB / RB | Trocar estante (Console) ou categoria (Biblioteca) |
+| Tab | Options | Menu | Alternar Console / Biblioteca |
+| — | Create | View | Adicionar jogo |
 
 ## Legal
 

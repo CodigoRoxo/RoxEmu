@@ -1,17 +1,28 @@
 import { useEffect, useState } from "react";
 import * as backend from "../lib/backend";
 import type { SettingsView } from "../lib/backend";
+import type { PadPref, PadStyle } from "../hooks/usePadStyle";
 import { IosSpinner } from "./Cover";
+import { PadGlyph } from "./PadGlyph";
 
 interface Props {
   onClose: () => void;
   onSaved: (message: string) => void;
   soundOn: boolean;
   onToggleSound: () => void;
+  padPref: PadPref;
+  padDetected: PadStyle | null;
+  onPadPref: (p: PadPref) => void;
 }
 
-/** Configurações do ROXemu. Por enquanto: artes em alta resolução (SteamGridDB) e sons. */
-export function SettingsPanel({ onClose, onSaved, soundOn, onToggleSound }: Props) {
+const PAD_OPTIONS: [PadPref, string][] = [
+  ["auto", "Automático"],
+  ["ps", "PlayStation"],
+  ["xbox", "Xbox"],
+];
+
+/** Configurações do ROXemu: botões do controle, artes em alta resolução (SteamGridDB) e sons. */
+export function SettingsPanel({ onClose, onSaved, soundOn, onToggleSound, padPref, padDetected, onPadPref }: Props) {
   const [view, setView] = useState<SettingsView | null>(null);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,6 +64,28 @@ export function SettingsPanel({ onClose, onSaved, soundOn, onToggleSound }: Prop
             ✕
           </button>
         </header>
+
+        <div className="set-block">
+          <h3>Botões na tela</h3>
+          <p>
+            Os símbolos seguem o controle conectado
+            {padDetected ? ` (agora: ${padDetected === "ps" ? "PlayStation" : "Xbox"})` : " (nenhum controle detectado)"}.
+            Como no PS5: <PadGlyph action="confirm" style="ps" /> confirma e <PadGlyph action="back" style="ps" /> volta.
+          </p>
+          <div className="seg big" role="radiogroup" aria-label="Estilo dos botões">
+            {PAD_OPTIONS.map(([value, label]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={padPref === value}
+                className={padPref === value ? "on" : ""}
+                onClick={() => onPadPref(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="set-block">
           <h3>Artes de fundo em alta resolução</h3>

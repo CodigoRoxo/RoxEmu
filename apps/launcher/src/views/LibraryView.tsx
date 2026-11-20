@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { FittedCover } from "../components/Cover";
 import { SYSTEMS, type Game, type SystemId } from "../data/games";
 
@@ -12,6 +12,18 @@ interface Props {
   onCover: (game: Game, kind: "web" | "file") => void;
 }
 
+/** Agrupa por console, na ordem em que aparecem; é a ordem da grade (e da navegação pelo controle). */
+export function groupBySystem(games: Game[]): [SystemId, Game[]][] {
+  const by = new Map<SystemId, Game[]>();
+  for (const g of games) by.set(g.system, [...(by.get(g.system) ?? []), g]);
+  return [...by.entries()];
+}
+
+/** Jogos na ordem exata em que a grade mostra. */
+export function gridOrder(games: Game[]): Game[] {
+  return groupBySystem(games).flatMap(([, list]) => list);
+}
+
 /** Modo Biblioteca: grade agrupada por console e painel de detalhes. */
 export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRemove, onCover }: Props) {
   const [query, setQuery] = useState("");
@@ -23,13 +35,14 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRe
     );
   }, [games, query]);
 
-  const groups = useMemo(() => {
-    const by = new Map<SystemId, Game[]>();
-    for (const g of visible) by.set(g.system, [...(by.get(g.system) ?? []), g]);
-    return [...by.entries()];
-  }, [visible]);
+  const groups = useMemo(() => groupBySystem(visible), [visible]);
 
-  const selected = visible.find((g) => g.id === selectedId) ?? visible[0] ?? null;
+  const selected = visible.find((g) => g.id === selectedId) ?? gridOrder(visible)[0] ?? null;
+
+  // Navegando pelo controle: mantém o card selecionado à vista.
+  useEffect(() => {
+    document.querySelector(".library .card.sel")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selected?.id]);
 
   return (
     <section className="library">

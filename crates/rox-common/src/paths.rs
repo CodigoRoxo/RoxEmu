@@ -58,8 +58,10 @@ impl DataDirs {
                 return Ok(Self::from_root(exe_dir.join("portable-data"), true));
             }
         }
-        let dirs = directories::ProjectDirs::from("", "", "ROXemu").ok_or(PathsError::NoHome)?;
-        Ok(Self::from_root(dirs.config_dir(), false))
+        let base = directories::BaseDirs::new().ok_or(PathsError::NoHome)?;
+        let root = base.config_dir().join("ROXemu");
+        migrate_legacy(&root);
+        Ok(Self::from_root(root, false))
     }
 
     /// Cria as pastas que ainda não existem.
@@ -81,9 +83,45 @@ impl DataDirs {
     }
 }
 
+/// Versões até 0.1.0 guardavam tudo em `ROXemu\config\` (efeito colateral da biblioteca de
+/// pastas). Move o conteúdo para `ROXemu\`, sem sobrescrever nada que já exista lá.
+fn migrate_legacy(root: &Path) {
+    let old = root.join("config");
+    let Ok(entries) = std::fs::read_dir(&old) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let target = root.join(entry.file_name());
+        if !target.exists() {
+            if let Err(e) = std::fs::rename(entry.path(), &target) {
+                eprintln!("ROXemu: não consegui mover {}: {e}", entry.path().display());
+            }
+        }
+    }
+    // Só apaga a pasta antiga se ficou vazia (remove_dir falha se tiver algo).
+    let _ = std::fs::remove_dir(&old);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migra_pasta_config_antiga_sem_sobrescrever() {
+        let root = std::env::temp_dir().join(format!("rox-migra-{}", std::process::id()));
+        let old = root.join("config");
+        std::fs::create_dir_all(old.join("bios")).unwrap();
+        std::fs::write(old.join("bios").join("scph1001.bin"), b"bios").unwrap();
+        std::fs::write(old.join("library.json"), b"antigo").unwrap();
+        std::fs::write(root.join("library.json"), b"novo").unwrap();
+
+        migrate_legacy(&root);
+
+        assert!(root.join("bios").join("scph1001.bin").exists());
+        assert_eq!(std::fs::read(root.join("library.json")).unwrap(), b"novo");
+        assert!(old.join("library.json").exists()); // conflito: o antigo fica onde estava
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn subpastas_ficam_dentro_da_raiz() {

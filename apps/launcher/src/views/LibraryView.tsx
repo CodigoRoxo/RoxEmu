@@ -9,10 +9,11 @@ interface Props {
   onLaunch: (game: Game) => void;
   onAdd: () => void;
   onRemove: (game: Game) => void;
+  onCover: (game: Game, kind: "web" | "file") => void;
 }
 
 /** Modo Biblioteca: grade agrupada por console e painel de detalhes. */
-export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRemove }: Props) {
+export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRemove, onCover }: Props) {
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
@@ -105,7 +106,7 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRe
         ))}
       </div>
 
-      {selected && <DetailPanel game={selected} onLaunch={onLaunch} onRemove={onRemove} />}
+      {selected && <DetailPanel game={selected} onLaunch={onLaunch} onRemove={onRemove} onCover={onCover} />}
     </section>
   );
 }
@@ -114,17 +115,23 @@ function DetailPanel({
   game,
   onLaunch,
   onRemove,
+  onCover,
 }: {
   game: Game;
   onLaunch: (g: Game) => void;
   onRemove: (g: Game) => void;
+  onCover: (g: Game, kind: "web" | "file") => void;
 }) {
   const colors = { "--c1": game.c1, "--c2": game.c2 } as CSSProperties;
   const sys = SYSTEMS[game.system];
   return (
     <aside className="panel">
       <div className="banner" style={colors}>
-        <div className={`m m-${game.motif}`} style={{ left: "40%", width: "50%" }} />
+        {game.coverUrl ? (
+          <img className="banner-art" src={game.coverUrl} alt="" draggable={false} />
+        ) : (
+          <div className={`m m-${game.motif}`} style={{ left: "40%", width: "50%" }} />
+        )}
         <Cover game={game} />
       </div>
       <h2>{game.title}</h2>
@@ -162,20 +169,25 @@ function DetailPanel({
         <dd className="path">{game.path ?? `D:\\Jogos\\${sys.folder}\\${game.file}`}</dd>
       </dl>
       <div className="sub">Jogo</div>
-      <div className="mini">
-        <button>Configurações</button>
-        <button>Controles</button>
-        <button>Trapaças</button>
-        {game.demo ? (
+      {game.demo ? (
+        <div className="mini">
+          <button>Configurações</button>
+          <button>Controles</button>
+          <button>Trapaças</button>
           <button>
             Troféus {game.trophies[0]}/{game.trophies[1]}
           </button>
-        ) : (
+        </div>
+      ) : (
+        <div className="mini">
+          <button onClick={() => onCover(game, "file")}>Trocar capa…</button>
+          <button onClick={() => onCover(game, "web")}>Buscar capa na web</button>
+          <button>Configurações</button>
           <button className="danger" onClick={() => onRemove(game)}>
             Remover da estante
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {game.playtime && game.demo && (
         <>
           <div className="sub">Save states</div>

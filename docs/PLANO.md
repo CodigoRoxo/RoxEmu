@@ -282,7 +282,10 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 ### Fase 2 — Biblioteca e metadados *(≈ 2 semanas)*
 - [ ] Scanner de pastas, parser CUE/ISO9660, extração do serial e suporte a CHD.
 - [ ] Importar a base Redump/libretro e casar serial → título e região.
-- [ ] Download e cache das capas (libretro-thumbnails), hero e logo opcionais.
+- [x] Download e cache das capas (libretro-thumbnails): ao adicionar o jogo e ao abrir o app,
+      com nova tentativa e plano B quando a API do GitHub falha; capa também vira o fundo da tela.
+- [x] Trocar capa por uma imagem própria e "Buscar capa na web" de novo.
+- [ ] Hero e logo opcionais (SteamGridDB).
 - [ ] SQLite, mais comandos Tauri para listar, buscar e atualizar.
 
 **Pronto quando:** apontar uma pasta → todos os jogos aparecem com nome certo e capa.

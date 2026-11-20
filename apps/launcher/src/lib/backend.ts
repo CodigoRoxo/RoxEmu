@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface AppInfo {
@@ -23,6 +23,7 @@ export interface LibraryGame {
   last_played: number | null;
   playtime_secs: number;
   favorite: boolean;
+  cover: string | null;
 }
 
 export type RunnerEvent =
@@ -51,6 +52,27 @@ export const removeGame = (id: number) => invoke<void>("remove_game", { id });
 export const setFavorite = (id: number, favorite: boolean) => invoke<void>("set_favorite", { id, favorite });
 export const launchGame = (id: number) => invoke<void>("launch_game", { id });
 export const openBiosFolder = () => invoke<void>("open_bios_folder");
+
+export const refreshCover = (id: number) => invoke<void>("refresh_cover", { id });
+/** Escolher imagem própria como capa. `false` se cancelar. */
+export const chooseCover = (id: number) => invoke<boolean>("choose_cover", { id });
+
+/** Avisado quando algo muda na biblioteca em segundo plano (ex.: capa baixada). */
+export function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
+  if (!inApp) return Promise.resolve(() => {});
+  return listen("library-changed", () => cb());
+}
+
+/** Avisado quando a busca de capa de um jogo não encontrou nada (ou falhou). */
+export function onCoverMissing(cb: (e: { title: string; error: string | null }) => void): Promise<UnlistenFn> {
+  if (!inApp) return Promise.resolve(() => {});
+  return listen<{ title: string; error: string | null }>("cover-missing", (e) => cb(e.payload));
+}
+
+/** URL que a interface usa para mostrar um arquivo de capa do disco. */
+export function fileUrl(path: string): string {
+  return convertFileSrc(path);
+}
 
 export function onRunnerEvent(cb: (e: RunnerEvent) => void): Promise<UnlistenFn> {
   if (!inApp) return Promise.resolve(() => {});

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ambient } from "./components/Ambient";
 import { LaunchOverlay, type LaunchSession } from "./components/LaunchOverlay";
 import { CATEGORIES, SAMPLE_GAMES, fromLibrary, type Game } from "./data/games";
+import { useCoverColors } from "./hooks/useCoverColors";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
 import * as backend from "./lib/backend";
 import type { AppInfo, LibraryGame } from "./lib/backend";
@@ -33,6 +34,21 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+    // Capas baixadas em segundo plano chegam por aqui.
+    const off = backend.onLibraryChanged(() => {
+      backend.listGames().then(setLibrary).catch(() => {});
+    });
+    const offMissing = backend.onCoverMissing(({ title, error }) =>
+      setToast(
+        error
+          ? `Não consegui buscar a capa de ${title} (${error}). Tente de novo ou escolha uma imagem em Biblioteca.`
+          : `Não achei a capa de ${title} na internet. Em Biblioteca → "Trocar capa…" você escolhe uma imagem.`,
+      ),
+    );
+    return () => {
+      off.then((f) => f());
+      offMissing.then((f) => f());
+    };
   }, [refresh]);
 
   // Jogos reais primeiro; os exemplos só aparecem enquanto a estante está vazia.
@@ -47,6 +63,7 @@ export default function App() {
   }, [games, category]);
 
   const current = list[Math.min(selected, list.length - 1)];
+  const [tint1, tint2] = useCoverColors(current?.coverUrl, [current?.c1 ?? "#3b1a7a", current?.c2 ?? "#ff4fa3"]);
 
   // ---------- eventos do runner ----------
   const sessionRef = useRef(session);
@@ -199,7 +216,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Ambient c1={current?.c1 ?? "#3b1a7a"} c2={current?.c2 ?? "#ff4fa3"} />
+      <Ambient c1={tint1} c2={tint2} art={current?.coverUrl} />
 
       <header className="top">
         <div className="logo">
@@ -271,6 +288,19 @@ export default function App() {
           onLaunch={launch}
           onAdd={addGame}
           onRemove={removeGame}
+          onCover={async (game, kind) => {
+            try {
+              if (kind === "web") {
+                await backend.refreshCover(game.id);
+                setToast(`Procurando a capa de ${game.title}…`);
+              } else if (await backend.chooseCover(game.id)) {
+                await refresh();
+                setToast("Capa trocada");
+              }
+            } catch (e) {
+              setToast(String(e));
+            }
+          }}
         />
       )}
 

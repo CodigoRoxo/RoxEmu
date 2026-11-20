@@ -1,7 +1,7 @@
 // Jogos da estante: os do usuário (library.json) e os exemplos fictícios, mostrados só
 // enquanto a biblioteca está vazia.
 
-import type { LibraryGame } from "../lib/backend";
+import { fileUrl, type LibraryGame } from "../lib/backend";
 
 export type SystemId = "ps1" | "snes" | "gba";
 export type Motif = "sun" | "moon" | "stripes" | "ring" | "star" | "grid";
@@ -26,6 +26,8 @@ export interface Game {
   file: string;
   /** Caminho completo do arquivo (só jogos reais). */
   path?: string;
+  /** Capa de verdade (URL para o <img>), quando já foi baixada. */
+  coverUrl?: string;
   /** Cores da capa gerada (substituída pela capa real na Fase 2). */
   c1: string;
   c2: string;
@@ -119,6 +121,7 @@ export function fromLibrary(g: LibraryGame): Game {
     favorite: g.favorite,
     file,
     path: g.path,
+    coverUrl: g.cover ? fileUrl(g.cover) : undefined,
     c1,
     c2,
     motif: MOTIFS[(h >>> 8) % MOTIFS.length],

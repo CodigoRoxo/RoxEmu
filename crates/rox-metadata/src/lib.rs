@@ -4,6 +4,9 @@
 //! Fase 2: download com cache local, casamento serial -> título pela base Redump,
 //! e fontes opcionais (SteamGridDB para hero/logo).
 
+pub mod covers;
+
+pub use covers::CoverFetcher;
 use rox_common::SystemId;
 use serde::Serialize;
 

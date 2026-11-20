@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 /** Fundo roxo/rosa com brilhos que seguem as cores do jogo selecionado e partículas de luz. */
-export function Ambient({ c1, c2 }: { c1: string; c2: string }) {
+export function Ambient({ c1, c2, art }: { c1: string; c2: string; art?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -56,6 +56,7 @@ export function Ambient({ c1, c2 }: { c1: string; c2: string }) {
 
   return (
     <div className="bg" aria-hidden="true">
+      {art && <img key={art} className="hero" src={art} alt="" draggable={false} />}
       <div className="blob a" style={{ backgroundColor: `color-mix(in srgb, ${c1} 45%, #7c3aed)` }} />
       <div className="blob b" style={{ backgroundColor: `color-mix(in srgb, ${c2} 40%, #db2777)` }} />
       <canvas ref={canvas} />

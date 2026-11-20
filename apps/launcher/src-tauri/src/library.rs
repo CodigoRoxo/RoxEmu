@@ -22,6 +22,12 @@ pub struct LibraryGame {
     pub last_played: Option<u64>,
     pub playtime_secs: u64,
     pub favorite: bool,
+    /// Imagem da capa (baixada da web ou escolhida pelo usuário).
+    #[serde(default)]
+    pub cover: Option<PathBuf>,
+    /// Quando a busca de capa rodou pela última vez (para não insistir toda hora).
+    #[serde(default)]
+    pub cover_checked_at: Option<u64>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -88,6 +94,8 @@ impl Library {
             last_played: None,
             playtime_secs: 0,
             favorite: false,
+            cover: None,
+            cover_checked_at: None,
         };
         self.data.games.push(game.clone());
         self.save()?;
@@ -102,6 +110,17 @@ impl Library {
     pub fn set_favorite(&mut self, id: i64, favorite: bool) -> Result<(), String> {
         if let Some(g) = self.data.games.iter_mut().find(|g| g.id == id) {
             g.favorite = favorite;
+        }
+        self.save()
+    }
+
+    /// Registra o resultado de uma busca de capa (`None` = não achou, mantém a anterior).
+    pub fn set_cover(&mut self, id: i64, cover: Option<PathBuf>) -> Result<(), String> {
+        if let Some(g) = self.data.games.iter_mut().find(|g| g.id == id) {
+            if cover.is_some() {
+                g.cover = cover;
+            }
+            g.cover_checked_at = Some(now_secs());
         }
         self.save()
     }

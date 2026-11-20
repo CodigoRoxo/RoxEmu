@@ -1,5 +1,6 @@
 //! Backend do launcher: comandos que a interface chama via `invoke`.
 
+mod covers;
 mod launch;
 mod library;
 
@@ -75,9 +76,42 @@ async fn add_game(app: AppHandle) -> Result<Option<LibraryGame>, String> {
         return Ok(None);
     };
     let path = file.into_path().map_err(|e| e.to_string())?;
+    let game = {
+        let state = app.state::<AppState>();
+        let mut lib = state.library.lock().map_err(|e| e.to_string())?;
+        lib.add(&path)?
+    };
+    covers::fetch_in_background(&app, Some(game.id), false);
+    Ok(Some(game))
+}
+
+/// Tenta de novo buscar a capa na internet.
+#[tauri::command]
+fn refresh_cover(app: AppHandle, id: i64) {
+    covers::fetch_in_background(&app, Some(id), true);
+}
+
+/// Deixa o usuário escolher uma imagem própria como capa. `false` = cancelou.
+#[tauri::command]
+async fn choose_cover(app: AppHandle, id: i64) -> Result<bool, String> {
+    let Some(file) = app
+        .dialog()
+        .file()
+        .set_title("Escolha a imagem da capa")
+        .add_filter("Imagens", &["png", "jpg", "jpeg", "webp"])
+        .blocking_pick_file()
+    else {
+        return Ok(false);
+    };
+    let image = file.into_path().map_err(|e| e.to_string())?;
     let state = app.state::<AppState>();
-    let mut lib = state.library.lock().map_err(|e| e.to_string())?;
-    lib.add(&path).map(Some)
+    let cover = covers::import_custom(&state.data.covers, id, &image)?;
+    state
+        .library
+        .lock()
+        .map_err(|e| e.to_string())?
+        .set_cover(id, Some(cover))?;
+    Ok(true)
 }
 
 #[tauri::command]
@@ -119,10 +153,12 @@ fn open_bios_folder(state: State<AppState>) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let data = DataDirs::resolve().expect("não foi possível achar a pasta de dados do ROXemu");
     data.ensure()
         .expect("não foi possível criar as pastas do ROXemu");
     let library = Library::open(data.root.join("library.json"));
+    let covers_dir = data.covers.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -131,6 +167,13 @@ pub fn run() {
             library: Mutex::new(library),
         })
         .manage(launch::Running::default())
+        .setup(move |app| {
+            // A interface só pode ler imagens da pasta de capas (nada mais do disco).
+            app.asset_protocol_scope()
+                .allow_directory(&covers_dir, true)?;
+            covers::fetch_in_background(app.handle(), None, false);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_info,
             list_games,
@@ -138,7 +181,9 @@ pub fn run() {
             remove_game,
             set_favorite,
             launch_game,
-            open_bios_folder
+            open_bios_folder,
+            refresh_cover,
+            choose_cover
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o ROXemu");

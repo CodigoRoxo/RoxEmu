@@ -9,6 +9,7 @@ const pending = new Map<string, Promise<number>>();
 const TYPICAL: Record<SystemId, number> = {
   ps1: 1, // caixa de CD (jewel case): quase quadrada
   ps2: 0.71, // caixa de DVD: retrato
+  ps3: 0.8, // caixa de Blu-ray: retrato, um pouco mais larga
   snes: 1.38, // caixa de cartucho (EUA/Europa): paisagem
   gba: 1,
 };

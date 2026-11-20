@@ -36,6 +36,15 @@ cargo test --workspace
 cargo build -p rox-runner --release
 ```
 
+### PS3
+
+O PS3 roda no **RPCS3** embutido (release oficial, SHA-256 conferido pelo `fetch-emulators.ps1`).
+Ele precisa do **firmware oficial** (`PS3UPDAT.PUP`), que a Sony oferece de graça no site dela: em
+Configurações → PlayStation 3, use "Baixar no site da Sony" e depois "Instalar firmware". Jogos:
+adicione a **pasta** do jogo (Biblioteca → + Pasta de PS3) ou a **ISO** (decifrada ou com o `.dkey`
+ao lado). O ROXemu lê nome e código do `PARAM.SFO`, abre direto em tela cheia, com o sistema em
+português e o controle (DualSense, DualShock 4 ou Xbox) já mapeado.
+
 ### PS2
 
 O PS2 roda no **PCSX2** embutido: o ROXemu configura e abre ele direto em tela cheia, já com a

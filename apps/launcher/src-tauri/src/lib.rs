@@ -6,6 +6,7 @@ mod ini;
 mod launch;
 mod library;
 mod pcsx2;
+mod rpcs3;
 mod settings;
 
 use std::sync::Mutex;
@@ -59,6 +60,80 @@ async fn set_steamgriddb_key(app: AppHandle, key: String) -> Result<(), String> 
     }
     art::fetch_in_background(&app, None, true);
     Ok(())
+}
+
+#[derive(Serialize)]
+struct Ps3Status {
+    emulator_found: bool,
+    /// Versão do firmware instalado ("4.92"), ou nada se ainda não foi instalado.
+    firmware: Option<String>,
+}
+
+#[tauri::command]
+fn ps3_status() -> Ps3Status {
+    let dir = rpcs3::find_dir(&launch::exe_dir_pub());
+    Ps3Status {
+        emulator_found: dir.is_some(),
+        firmware: dir.as_deref().and_then(rpcs3::firmware_version),
+    }
+}
+
+/// Abre a página oficial da Sony com o firmware do PS3.
+#[tauri::command]
+fn open_ps3_firmware_page() -> Result<(), String> {
+    std::process::Command::new("explorer")
+        .arg(rpcs3::FIRMWARE_PAGE)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Escolhe o PS3UPDAT.PUP baixado e manda o RPCS3 instalar. O resultado chega pelo evento
+/// `ps3-firmware` quando o usuário fecha a janela do RPCS3. `false` = cancelou.
+#[tauri::command]
+async fn install_ps3_firmware(app: AppHandle) -> Result<bool, String> {
+    let dir = rpcs3::find_dir(&launch::exe_dir_pub())
+        .ok_or("O RPCS3 não foi encontrado junto do ROXemu.")?;
+    let Some(file) = app
+        .dialog()
+        .file()
+        .set_title("Escolha o arquivo PS3UPDAT.PUP baixado do site da Sony")
+        .add_filter("Firmware do PS3", &["PUP"])
+        .blocking_pick_file()
+    else {
+        return Ok(false);
+    };
+    let pup = file.into_path().map_err(|e| e.to_string())?;
+    let mut child = rpcs3::install_firmware_command(&dir, &pup)
+        .spawn()
+        .map_err(|e| format!("Não foi possível abrir o RPCS3: {e}"))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        let _ = tauri::Emitter::emit(&app, "ps3-firmware", rpcs3::firmware_version(&dir));
+    });
+    Ok(true)
+}
+
+/// Adiciona um jogo de PS3 em pasta (escolhendo a pasta). `None` = cancelou.
+#[tauri::command]
+async fn add_game_folder(app: AppHandle) -> Result<Option<LibraryGame>, String> {
+    let Some(folder) = app
+        .dialog()
+        .file()
+        .set_title("Escolha a pasta do jogo de PS3 (a que tem PS3_GAME dentro)")
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let path = folder.into_path().map_err(|e| e.to_string())?;
+    let game = {
+        let state = app.state::<AppState>();
+        let mut lib = state.library.lock().map_err(|e| e.to_string())?;
+        lib.add(&path)?
+    };
+    covers::fetch_in_background(&app, Some(game.id), false);
+    art::fetch_in_background(&app, Some(game.id), false);
+    Ok(Some(game))
 }
 
 /// Busca de novo a arte de fundo de um jogo.
@@ -124,7 +199,7 @@ fn list_games(state: State<AppState>) -> Result<Vec<LibraryGame>, String> {
 /// Abre o seletor de arquivos e adiciona o jogo escolhido. `None` = usuário cancelou.
 #[tauri::command]
 async fn add_game(app: AppHandle) -> Result<Option<LibraryGame>, String> {
-    let mut exts: Vec<&str> = [SystemId::Ps1, SystemId::Ps2]
+    let mut exts: Vec<&str> = [SystemId::Ps1, SystemId::Ps2, SystemId::Ps3]
         .iter()
         .flat_map(|s| s.extensions().iter().copied())
         .collect();
@@ -133,8 +208,10 @@ async fn add_game(app: AppHandle) -> Result<Option<LibraryGame>, String> {
     let Some(file) = app
         .dialog()
         .file()
-        .set_title("Escolha um jogo de PlayStation ou PlayStation 2")
-        .add_filter("Jogos de PS1 e PS2", &exts)
+        .set_title(
+            "Escolha um jogo de PS1, PS2 ou PS3 (no PS3 em pasta: o EBOOT.BIN ou o PARAM.SFO)",
+        )
+        .add_filter("Jogos de PlayStation", &exts)
         .blocking_pick_file()
     else {
         return Ok(None);
@@ -195,7 +272,7 @@ fn set_favorite(state: State<AppState>, id: i64, favorite: bool) -> Result<(), S
 
 /// Abre o jogo no runner. O progresso chega pelo evento `runner`.
 #[tauri::command]
-fn launch_game(app: AppHandle, id: i64) -> Result<(), String> {
+fn launch_game(app: AppHandle, id: i64, pad: Option<String>) -> Result<(), String> {
     let game = {
         let state = app.state::<AppState>();
         let lib = state.library.lock().map_err(|e| e.to_string())?;
@@ -203,7 +280,7 @@ fn launch_game(app: AppHandle, id: i64) -> Result<(), String> {
             .cloned()
             .ok_or("Jogo não encontrado na biblioteca.")?
     };
-    launch::launch(&app, game)
+    launch::launch(&app, game, rpcs3::PadKind::from_ui(pad.as_deref()))
 }
 
 /// Abre a pasta da BIOS no Explorer.
@@ -255,7 +332,11 @@ pub fn run() {
             get_settings,
             set_steamgriddb_key,
             refresh_art,
-            open_steamgriddb_page
+            open_steamgriddb_page,
+            ps3_status,
+            open_ps3_firmware_page,
+            install_ps3_firmware,
+            add_game_folder
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o ROXemu");

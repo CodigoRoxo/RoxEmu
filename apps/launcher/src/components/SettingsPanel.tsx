@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as backend from "../lib/backend";
 import type { SettingsView } from "../lib/backend";
 import type { PadPref, PadStyle } from "../hooks/usePadStyle";
@@ -24,6 +24,35 @@ const PAD_OPTIONS: [PadPref, string][] = [
 /** Configurações do ROXemu: botões do controle, artes em alta resolução (SteamGridDB) e sons. */
 export function SettingsPanel({ onClose, onSaved, soundOn, onToggleSound, padPref, padDetected, onPadPref }: Props) {
   const [view, setView] = useState<SettingsView | null>(null);
+  const [ps3, setPs3] = useState<backend.Ps3Status | null>(null);
+  const [ps3Busy, setPs3Busy] = useState(false);
+
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+
+  useEffect(() => {
+    backend.ps3Status().then(setPs3).catch(() => {});
+    const off = backend.onPs3Firmware((version) => {
+      setPs3Busy(false);
+      backend.ps3Status().then(setPs3).catch(() => {});
+      onSavedRef.current(
+        version
+          ? `Firmware do PS3 ${version} instalado! Os jogos de PS3 já podem ser abertos.`
+          : "A janela do RPCS3 fechou, mas o firmware não aparece instalado. Tente de novo e espere o 'Success' antes de fechar.",
+      );
+    });
+    return () => {
+      off.then((f) => f());
+    };
+  }, []);
+
+  const installFirmware = async () => {
+    try {
+      if (await backend.installPs3Firmware()) setPs3Busy(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +114,46 @@ export function SettingsPanel({ onClose, onSaved, soundOn, onToggleSound, padPre
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="set-block">
+          <h3>PlayStation 3</h3>
+          <p>
+            O PS3 roda no <b>RPCS3</b>, que já vem no ROXemu. Ele precisa do <b>firmware oficial do PS3</b>, que a
+            própria Sony oferece de graça no site dela (o ROXemu não pode distribuir):
+          </p>
+          <ol>
+            <li>
+              Clique em <b>Baixar no site da Sony</b> e baixe o arquivo <b>PS3UPDAT.PUP</b>.
+            </li>
+            <li>
+              Clique em <b>Instalar firmware</b> e escolha o arquivo baixado. O RPCS3 abre mostrando a instalação;
+              quando aparecer <b>Success</b>, feche a janela dele.
+            </li>
+          </ol>
+          <div className="key-status">
+            {!ps3 ? (
+              <span className="warn">Abra o ROXemu pelo app para ver o status.</span>
+            ) : !ps3.emulator_found ? (
+              <span className="warn">RPCS3 não encontrado (rode emulators/fetch-emulators.ps1).</span>
+            ) : ps3.firmware ? (
+              <span className="ok">Firmware {ps3.firmware} instalado</span>
+            ) : (
+              <span className="warn">Firmware ainda não instalado</span>
+            )}
+          </div>
+          <div className="row-actions">
+            <button className="btn small" onClick={() => backend.openPs3FirmwarePage().catch((e) => setError(String(e)))}>
+              Baixar no site da Sony
+            </button>
+            <button className="btn play small" disabled={ps3Busy || !ps3?.emulator_found} onClick={installFirmware}>
+              {ps3Busy ? "Instalando… feche o RPCS3 ao terminar" : "Instalar firmware"}
+            </button>
+          </div>
+          <p className="fine">
+            Jogos de PS3: adicione a <b>pasta</b> do jogo (Biblioteca → + Pasta de PS3) ou a <b>ISO</b>. A ISO precisa
+            estar decifrada ou ter o arquivo .dkey ao lado.
+          </p>
         </div>
 
         <div className="set-block">

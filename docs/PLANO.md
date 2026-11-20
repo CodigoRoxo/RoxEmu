@@ -321,6 +321,15 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 - [ ] Trocar pelo core libretro (LRPS2) quando o runner tiver renderização por GPU (Fase 4).
 - [ ] Compilar o PCSX2 do fonte no CI das releases.
 
+### PS3 *(feito em 2026-11-20)*
+- [x] RPCS3 v0.0.43 embutido (release oficial, SHA-256 conferido).
+- [x] Jogos em pasta (PS3_GAME / EBOOT.BIN / PARAM.SFO) e ISO; título, código e região do PARAM.SFO.
+- [x] Firmware: botão para a página oficial da Sony e instalação via `rpcs3 --installfw`.
+- [x] Abre com `--no-gui --fullscreen`, fecha sozinho ao sair do jogo, sistema em PT-BR,
+      controle do jogador 1 gerado conforme o controle conectado (DualSense / DS4 / Xbox).
+- [ ] Instalar jogos .pkg da PSN (e licenças .rap).
+- [ ] Testar com um jogo real e firmware instalado.
+
 ### Sons de interface *(feito em 2026-11-20)*
 - [x] Sons sintetizados na hora (Web Audio, sem arquivos de terceiros): navegar, categoria,
       confirmar, voltar, abrir jogo, erro, favoritar, aviso e boot. Botão para ligar/desligar.

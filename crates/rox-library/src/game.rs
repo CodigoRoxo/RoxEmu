@@ -29,9 +29,74 @@ pub enum InspectError {
     Read(PathBuf),
 }
 
+/// Região pelo código de jogo do PS3 (3ª letra): BLUS -> EUA, BLES -> Europa, BLJM -> Japão.
+fn ps3_region(title_id: &str) -> Option<String> {
+    let r = match title_id.chars().nth(2)? {
+        'U' => "NTSC-U",
+        'E' => "PAL",
+        'J' | 'A' | 'K' | 'H' => "NTSC-J",
+        _ => return None,
+    };
+    Some(r.to_string())
+}
+
+fn dir_size(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| match e.metadata() {
+                    Ok(m) if m.is_dir() => dir_size(&e.path()),
+                    Ok(m) => m.len(),
+                    Err(_) => 0,
+                })
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// Jogo de PS3 (pasta, EBOOT.BIN, PARAM.SFO ou ISO com PS3_GAME dentro).
+fn inspect_ps3(path: &Path) -> Option<GameFile> {
+    let game = crate::ps3::identify(path)?;
+    let is_iso = game.root.is_file();
+    let size = if is_iso {
+        std::fs::metadata(&game.root).map(|m| m.len()).unwrap_or(0)
+    } else {
+        dir_size(&game.root)
+    };
+    Some(GameFile {
+        system: SystemId::Ps3,
+        region: game.title_id.as_deref().and_then(ps3_region),
+        format: if is_iso { "ISO".into() } else { "Pasta".into() },
+        serial: game.title_id,
+        title: game.title,
+        size_bytes: size,
+        discs: 1,
+        launch_path: game.root,
+    })
+}
+
 /// Descobre console, formato e serial do arquivo. Ordem de confiança para o console:
-/// `SYSTEM.CNF` dentro do disco > extensão exclusiva > nome da pasta > tamanho do arquivo.
+/// `PARAM.SFO` (PS3) / `SYSTEM.CNF` dentro do disco > extensão exclusiva > nome da pasta > tamanho.
 pub fn inspect(path: &Path) -> Result<GameFile, InspectError> {
+    // PS3: pasta do jogo, EBOOT.BIN, PARAM.SFO ou ISO de Blu-ray.
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_ascii_uppercase())
+        .unwrap_or_default();
+    let maybe_ps3 =
+        path.is_dir() || name == "EBOOT.BIN" || name == "PARAM.SFO" || name.ends_with(".ISO");
+    if maybe_ps3 {
+        if let Some(game) = inspect_ps3(path) {
+            return Ok(game);
+        }
+        if path.is_dir() || name == "EBOOT.BIN" || name == "PARAM.SFO" {
+            return Err(InspectError::Unsupported(
+                "não achei o PARAM.SFO do jogo de PS3 nessa pasta".into(),
+            ));
+        }
+    }
+
     let format = detect_disc_format(path).ok_or_else(|| {
         InspectError::Unsupported(
             path.extension()
@@ -243,6 +308,32 @@ mod tests {
         let g = inspect(&path).unwrap();
         assert_eq!(g.system, SystemId::Ps2);
         assert_eq!(g.serial.as_deref(), Some("SLUS-20312"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn iso_e_pasta_de_ps3() {
+        let dir = std::env::temp_dir().join(format!("rox-ps3g-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sfo =
+            crate::ps3::tests::fake_sfo(&[("TITLE", "Corrida Rox"), ("TITLE_ID", "BLES01234")]);
+        let iso = crate::iso9660::tests::fake_iso_in_dir("PS3_GAME", "PARAM.SFO", &sfo);
+        let path = dir.join("corrida.iso");
+        std::fs::write(&path, iso).unwrap();
+        let g = inspect(&path).unwrap();
+        assert_eq!(g.system, SystemId::Ps3);
+        assert_eq!(g.title, "Corrida Rox");
+        assert_eq!(g.serial.as_deref(), Some("BLES-01234"));
+        assert_eq!(g.region.as_deref(), Some("PAL"));
+        assert_eq!(g.format, "ISO");
+
+        let folder = dir.join("Jogo");
+        std::fs::create_dir_all(folder.join("PS3_GAME").join("USRDIR")).unwrap();
+        std::fs::write(folder.join("PS3_GAME").join("PARAM.SFO"), &sfo).unwrap();
+        let g = inspect(&folder).unwrap();
+        assert_eq!(g.system, SystemId::Ps3);
+        assert_eq!(g.format, "Pasta");
+        assert_eq!(g.launch_path, folder);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

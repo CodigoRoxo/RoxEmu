@@ -114,8 +114,12 @@ function tone(ac: AudioContext, t: Tone) {
 }
 
 const PATCHES: Record<UiSound, (ac: AudioContext) => void> = {
-  // Tique de vidro bem curto ao andar pelos jogos.
-  move: (ac) => tone(ac, { freq: NOTE(E6), glideTo: NOTE(B5), dur: 0.07, gain: 0.12, harmonic: 0.25 }),
+  // Navegar: um "tic" seco e baixinho (sem eco, sem deslizar), para não cansar quando se
+  // passa por muitos jogos seguidos. Duas camadas: o corpo (seno) e um estalo curtíssimo.
+  move: (ac) => {
+    tone(ac, { freq: 2093, dur: 0.028, gain: 0.05, attack: 0.002, echo: false }); // C7
+    tone(ac, { freq: 4186, dur: 0.012, gain: 0.018, attack: 0.001, echo: false, type: "triangle" }); // brilho
+  },
   // Troca de categoria / modo: dois tiques.
   nav: (ac) => {
     tone(ac, { freq: NOTE(B5), dur: 0.06, gain: 0.1 });
@@ -164,7 +168,7 @@ export function play(sound: UiSound) {
   // Navegação rápida (segurar a seta): não empilha mais de um tique a cada 45 ms.
   if (sound === "move") {
     const now = performance.now();
-    if (now - lastMove < 45) return;
+    if (now - lastMove < 35) return;
     lastMove = now;
   }
   try {

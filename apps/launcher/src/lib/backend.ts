@@ -17,7 +17,7 @@ export interface AppInfo {
 /** Jogo como o backend guarda (library.json). */
 export interface LibraryGame {
   id: number;
-  system: "ps1" | "ps2" | "snes" | "gba";
+  system: "ps1" | "ps2" | "ps3" | "snes" | "gba";
   title: string;
   region: string | null;
   serial: string | null;
@@ -78,7 +78,30 @@ export async function addGame(): Promise<LibraryGame | null> {
 
 export const removeGame = (id: number) => invoke<void>("remove_game", { id });
 export const setFavorite = (id: number, favorite: boolean) => invoke<void>("set_favorite", { id, favorite });
-export const launchGame = (id: number) => invoke<void>("launch_game", { id });
+/** `pad`: controle conectado ("dualsense" | "ds4" | "xbox"), para o emulador já vir mapeado. */
+export const launchGame = (id: number, pad: string | null) => invoke<void>("launch_game", { id, pad });
+
+/** Jogo de PS3 em pasta: abre o seletor de pastas. `null` se cancelar. */
+export async function addGameFolder(): Promise<LibraryGame | null> {
+  if (!inApp) throw new Error("Adicionar jogos só funciona dentro do app ROXemu.");
+  return invoke<LibraryGame | null>("add_game_folder");
+}
+
+export interface Ps3Status {
+  emulator_found: boolean;
+  firmware: string | null;
+}
+export async function ps3Status(): Promise<Ps3Status | null> {
+  return inApp ? invoke<Ps3Status>("ps3_status") : null;
+}
+export const openPs3FirmwarePage = () => invoke<void>("open_ps3_firmware_page");
+/** Escolhe o PS3UPDAT.PUP e abre a instalação no RPCS3. `false` se cancelar. */
+export const installPs3Firmware = () => invoke<boolean>("install_ps3_firmware");
+/** Avisado quando a janela de instalação do firmware fecha (versão instalada, ou null). */
+export function onPs3Firmware(cb: (version: string | null) => void): Promise<UnlistenFn> {
+  if (!inApp) return Promise.resolve(() => {});
+  return listen<string | null>("ps3-firmware", (e) => cb(e.payload));
+}
 export const openBiosFolder = () => invoke<void>("open_bios_folder");
 
 export const refreshCover = (id: number) => invoke<void>("refresh_cover", { id });

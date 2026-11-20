@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub enum SystemId {
     Ps1,
     Ps2,
+    Ps3,
     Snes,
     Gba,
 }
@@ -26,13 +27,20 @@ pub enum Engine {
 }
 
 impl SystemId {
-    pub const ALL: [SystemId; 4] = [SystemId::Ps1, SystemId::Ps2, SystemId::Snes, SystemId::Gba];
+    pub const ALL: [SystemId; 5] = [
+        SystemId::Ps1,
+        SystemId::Ps2,
+        SystemId::Ps3,
+        SystemId::Snes,
+        SystemId::Gba,
+    ];
 
     /// Nome exibido na interface.
     pub fn display_name(self) -> &'static str {
         match self {
             SystemId::Ps1 => "PlayStation",
             SystemId::Ps2 => "PlayStation 2",
+            SystemId::Ps3 => "PlayStation 3",
             SystemId::Snes => "Super Nintendo",
             SystemId::Gba => "Game Boy Advance",
         }
@@ -44,6 +52,8 @@ impl SystemId {
         match self {
             SystemId::Ps1 => &["m3u", "cue", "chd", "pbp", "iso", "bin"],
             SystemId::Ps2 => &["m3u", "chd", "iso", "cso", "zso", "gz", "cue", "bin", "elf"],
+            // Jogo em pasta: escolhe-se o EBOOT.BIN ou o PARAM.SFO de dentro dela.
+            SystemId::Ps3 => &["iso", "bin", "sfo"],
             SystemId::Snes => &["sfc", "smc", "zip"],
             SystemId::Gba => &["gba", "zip"],
         }
@@ -51,7 +61,7 @@ impl SystemId {
 
     pub fn engine(self) -> Engine {
         match self {
-            SystemId::Ps2 => Engine::Standalone,
+            SystemId::Ps2 | SystemId::Ps3 => Engine::Standalone,
             _ => Engine::Libretro,
         }
     }
@@ -61,6 +71,7 @@ impl SystemId {
         match self {
             SystemId::Ps1 => "swanstation",
             SystemId::Ps2 => "pcsx2",
+            SystemId::Ps3 => "rpcs3",
             SystemId::Snes => "snes9x",
             SystemId::Gba => "mgba",
         }
@@ -69,6 +80,11 @@ impl SystemId {
     /// Precisa de BIOS fornecida pelo usuário?
     pub fn requires_bios(self) -> bool {
         matches!(self, SystemId::Ps1 | SystemId::Ps2)
+    }
+
+    /// O PS3 não usa BIOS, mas precisa do firmware oficial (PS3UPDAT.PUP, do site da Sony).
+    pub fn requires_firmware(self) -> bool {
+        matches!(self, SystemId::Ps3)
     }
 
     /// Tamanho exato do arquivo de BIOS, usado para reconhecer a BIOS na pasta.
@@ -85,6 +101,7 @@ impl SystemId {
         match self {
             SystemId::Ps1 => "Sony_-_PlayStation",
             SystemId::Ps2 => "Sony_-_PlayStation_2",
+            SystemId::Ps3 => "Sony_-_PlayStation_3",
             SystemId::Snes => "Nintendo_-_Super_Nintendo_Entertainment_System",
             SystemId::Gba => "Nintendo_-_Game_Boy_Advance",
         }

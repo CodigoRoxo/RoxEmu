@@ -11,6 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::library::{now_secs, LibraryGame};
+use crate::rpcs3::{self, PadKind};
 use crate::{pcsx2, AppState};
 
 /// Evento enviado para a interface (`listen("runner")`).
@@ -68,6 +69,11 @@ pub fn has_bios(dir: &Path, system: SystemId) -> bool {
     !system.requires_bios() || find_bios(dir, system).is_some()
 }
 
+/// Pasta do executável do ROXemu (onde ficam os emuladores na instalação).
+pub fn exe_dir_pub() -> PathBuf {
+    exe_dir()
+}
+
 fn exe_dir() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -96,7 +102,7 @@ fn find_core(data: &DataDirs, name: &str) -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.exists())
 }
 
-pub fn launch(app: &AppHandle, game: LibraryGame) -> Result<(), String> {
+pub fn launch(app: &AppHandle, game: LibraryGame, pad: PadKind) -> Result<(), String> {
     let state = app.state::<AppState>();
     let running = app.state::<Running>();
     {
@@ -106,7 +112,7 @@ pub fn launch(app: &AppHandle, game: LibraryGame) -> Result<(), String> {
         }
         *slot = Some(game.id);
     }
-    let result = spawn(app, &state.data, &game);
+    let result = spawn(app, &state.data, &game, pad);
     if result.is_err() {
         if let Ok(mut slot) = running.0.lock() {
             *slot = None;
@@ -115,7 +121,7 @@ pub fn launch(app: &AppHandle, game: LibraryGame) -> Result<(), String> {
     result
 }
 
-fn spawn(app: &AppHandle, data: &DataDirs, game: &LibraryGame) -> Result<(), String> {
+fn spawn(app: &AppHandle, data: &DataDirs, game: &LibraryGame, pad: PadKind) -> Result<(), String> {
     if !game.path.exists() {
         return Err(format!(
             "O arquivo do jogo não foi encontrado: {}",
@@ -133,7 +139,8 @@ fn spawn(app: &AppHandle, data: &DataDirs, game: &LibraryGame) -> Result<(), Str
         ));
     }
     if game.system.engine() == Engine::Standalone {
-        return spawn_standalone(app, data, game);
+        let prepared = prepare_standalone(data, game, pad)?;
+        return watch_standalone(app, game, prepared);
     }
     let runner = find_runner().ok_or("O rox-runner não foi encontrado junto do ROXemu.")?;
     let core_name = game.system.default_core();
@@ -219,18 +226,70 @@ fn spawn(app: &AppHandle, data: &DataDirs, game: &LibraryGame) -> Result<(), Str
     Ok(())
 }
 
-/// Abre um emulador completo (PS2 = PCSX2) e acompanha até ele fechar.
-fn spawn_standalone(app: &AppHandle, data: &DataDirs, game: &LibraryGame) -> Result<(), String> {
-    let exe_dir = exe_dir();
-    let dir = pcsx2::find_dir(&exe_dir)
-        .ok_or("O PCSX2 não foi encontrado junto do ROXemu. Rode emulators/fetch-emulators.ps1.")?;
-    let bios = find_bios(&data.bios, game.system).ok_or("BIOS do PS2 não encontrada.")?;
-    pcsx2::configure(&dir, &exe_dir, data, &bios)?;
+/// Um emulador completo pronto para abrir o jogo.
+struct Prepared {
+    name: &'static str,
+    command: Command,
+    /// Dica de erro se o emulador fechar logo ao abrir.
+    hint: String,
+}
 
-    log::info!("iniciando {} com PCSX2 ({})", game.title, bios.display());
-    let mut child = pcsx2::command(&dir, &game.path)
+/// Configura o emulador completo do console (PS2 = PCSX2, PS3 = RPCS3) e monta o comando.
+fn prepare_standalone(
+    data: &DataDirs,
+    game: &LibraryGame,
+    pad: PadKind,
+) -> Result<Prepared, String> {
+    let exe_dir = exe_dir();
+    match game.system {
+        SystemId::Ps3 => {
+            let dir = rpcs3::find_dir(&exe_dir).ok_or(
+                "O RPCS3 não foi encontrado junto do ROXemu. Rode emulators/fetch-emulators.ps1.",
+            )?;
+            if rpcs3::firmware_version(&dir).is_none() {
+                return Err("Falta o firmware do PS3. Baixe o PS3UPDAT.PUP no site oficial da Sony e instale em Configurações → PlayStation 3.".into());
+            }
+            rpcs3::configure(&dir, pad)?;
+            let target = rox_library::ps3::boot_target(&game.path);
+            log::info!("iniciando {} com RPCS3 ({})", game.title, target.display());
+            Ok(Prepared {
+                name: "RPCS3",
+                command: rpcs3::command(&dir, &target),
+                hint: format!(
+                    "Se for ISO, ela precisa estar decifrada ou ter o arquivo .dkey ao lado. Detalhes em {}",
+                    dir.join("log").display()
+                ),
+            })
+        }
+        _ => {
+            let dir = pcsx2::find_dir(&exe_dir).ok_or(
+                "O PCSX2 não foi encontrado junto do ROXemu. Rode emulators/fetch-emulators.ps1.",
+            )?;
+            let bios = find_bios(&data.bios, game.system).ok_or("BIOS do PS2 não encontrada.")?;
+            pcsx2::configure(&dir, &exe_dir, data, &bios)?;
+            log::info!("iniciando {} com PCSX2 ({})", game.title, bios.display());
+            Ok(Prepared {
+                name: "PCSX2",
+                command: pcsx2::command(&dir, &game.path),
+                hint: format!(
+                    "Confira se a BIOS do PS2 e o arquivo do jogo estão certos. Detalhes em {}",
+                    dir.join("logs").display()
+                ),
+            })
+        }
+    }
+}
+
+/// Abre o emulador completo e acompanha até ele fechar (conta o tempo de jogo).
+fn watch_standalone(app: &AppHandle, game: &LibraryGame, prepared: Prepared) -> Result<(), String> {
+    let Prepared {
+        name,
+        mut command,
+        hint,
+    } = prepared;
+    let mut child = command
         .spawn()
-        .map_err(|e| format!("Não foi possível abrir o PCSX2: {e}"))?;
+        .map_err(|e| format!("Não foi possível abrir o {name}: {e}"))?;
     let _ = app.emit("runner", UiRunnerEvent::Started { game_id: game.id });
 
     let app = app.clone();
@@ -245,9 +304,8 @@ fn spawn_standalone(app: &AppHandle, data: &DataDirs, game: &LibraryGame) -> Res
             UiRunnerEvent::Error {
                 game_id,
                 message: format!(
-                    "O PCSX2 fechou logo ao abrir ({}). Confira se a BIOS do PS2 e o arquivo do jogo estão certos. Detalhes em {}",
+                    "O {name} fechou logo ao abrir ({}). {hint}",
                     status.map(|s| s.to_string()).unwrap_or_default(),
-                    dir.join("logs").display()
                 ),
             }
         } else {

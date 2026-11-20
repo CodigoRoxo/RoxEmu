@@ -13,14 +13,16 @@ interface Props {
   session: LaunchSession;
   onClose: () => void;
   onOpenBios: () => void;
+  onOpenSettings: () => void;
   onAdd: () => void;
 }
 
 /** Tela sobre a estante enquanto um jogo abre, roda ou dá erro. */
-export function LaunchOverlay({ session, onClose, onOpenBios, onAdd }: Props) {
+export function LaunchOverlay({ session, onClose, onOpenBios, onOpenSettings, onAdd }: Props) {
   const { game, phase, message } = session;
   const core = SYSTEMS[game.system].core;
   const biosMissing = phase === "error" && !!message?.includes("BIOS");
+  const firmwareMissing = phase === "error" && !!message?.includes("firmware");
   const closable = phase !== "starting" && phase !== "playing";
 
   return (
@@ -48,19 +50,32 @@ export function LaunchOverlay({ session, onClose, onOpenBios, onAdd }: Props) {
             <p>
               {game.system === "ps2"
                 ? `${game.title} está aberto no PCSX2. Para sair, aperte Esc ou o botão Guide do controle e escolha fechar o jogo no menu.`
-                : `${game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do controle.`}
+                : game.system === "ps3"
+                  ? `${game.title} está aberto no RPCS3. Para sair, feche a janela do jogo (Alt+F4). Na primeira vez o RPCS3 prepara os shaders e pode demorar um pouco.`
+                  : `${game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do controle.`}
             </p>
           </>
         )}
 
         {phase === "error" && (
           <>
-            <h3>{biosMissing ? `Falta a BIOS do ${SYSTEMS[game.system].name}` : "Não deu para abrir o jogo"}</h3>
+            <h3>
+              {biosMissing
+                ? `Falta a BIOS do ${SYSTEMS[game.system].name}`
+                : firmwareMissing
+                  ? "Falta o firmware do PlayStation 3"
+                  : "Não deu para abrir o jogo"}
+            </h3>
             <p className="err">{message}</p>
             <div className="actions">
               {biosMissing && (
                 <button className="btn play" onClick={onOpenBios}>
                   Abrir pasta da BIOS
+                </button>
+              )}
+              {firmwareMissing && (
+                <button className="btn play" onClick={onOpenSettings}>
+                  Instalar firmware
                 </button>
               )}
               <button className="btn" onClick={onClose}>

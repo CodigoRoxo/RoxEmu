@@ -3,7 +3,7 @@
 
 import { fileUrl, type LibraryGame } from "../lib/backend";
 
-export type SystemId = "ps1" | "ps2" | "snes" | "gba";
+export type SystemId = "ps1" | "ps2" | "ps3" | "snes" | "gba";
 export type Motif = "sun" | "moon" | "stripes" | "ring" | "star" | "grid";
 
 export interface Game {
@@ -47,6 +47,7 @@ export interface Game {
 export const SYSTEMS: Record<SystemId, { name: string; core: string; dot: string; folder: string }> = {
   ps1: { name: "PlayStation", core: "SwanStation", dot: "#a78bfa", folder: "PS1" },
   ps2: { name: "PlayStation 2", core: "PCSX2", dot: "#38bdf8", folder: "PS2" },
+  ps3: { name: "PlayStation 3", core: "RPCS3", dot: "#e2e8f0", folder: "PS3" },
   snes: { name: "Super Nintendo", core: "Snes9x", dot: "#f472b6", folder: "SNES" },
   gba: { name: "Game Boy Advance", core: "mGBA", dot: "#60a5fa", folder: "GBA" },
 };
@@ -154,6 +155,7 @@ export const CATEGORIES: Category[] = [
   { label: "Favoritos", filter: (g) => g.favorite },
   { label: "PlayStation", filter: (g) => g.system === "ps1" },
   { label: "PlayStation 2", filter: (g) => g.system === "ps2" },
+  { label: "PlayStation 3", filter: (g) => g.system === "ps3" },
   { label: "Super Nintendo", filter: (g) => g.system === "snes" },
   { label: "Game Boy Advance", filter: (g) => g.system === "gba" },
   { label: "Multi-disco", filter: (g) => g.discs > 1 },

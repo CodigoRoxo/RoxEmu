@@ -8,6 +8,7 @@ pub mod formats;
 pub mod game;
 pub mod iso9660;
 pub mod ps1;
+pub mod ps3;
 
 pub use formats::{detect_format, GameFormat};
 pub use game::{inspect, GameFile};

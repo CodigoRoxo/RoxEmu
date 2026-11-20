@@ -8,6 +8,7 @@ interface Props {
   onSelect: (game: Game) => void;
   onLaunch: (game: Game) => void;
   onAdd: () => void;
+  onAddFolder: () => void;
   onRemove: (game: Game) => void;
   onCover: (game: Game, kind: "web" | "file") => void;
 }
@@ -25,7 +26,7 @@ export function gridOrder(games: Game[]): Game[] {
 }
 
 /** Modo Biblioteca: grade agrupada por console e painel de detalhes. */
-export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRemove, onCover }: Props) {
+export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onAddFolder, onRemove, onCover }: Props) {
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
@@ -85,6 +86,9 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onRe
               aria-label="Buscar"
             />
           </label>
+          <button className="btn small" onClick={onAddFolder} title="Jogos de PS3 em pasta (com PS3_GAME dentro)">
+            + Pasta de PS3
+          </button>
           <button className="btn play small" onClick={onAdd}>
             + Adicionar jogo
           </button>

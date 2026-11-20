@@ -13,3 +13,12 @@ version = "v2.8.2"
 url = "https://github.com/PCSX2/pcsx2/releases/download/v2.8.2/pcsx2-v2.8.2-windows-x64-Qt.7z"
 sha256 = "7dfc829ca1994cc1045ac49f05e39b6cf968b72e6a374c40e05c2a2b4ac200b4"
 exe = "pcsx2-qt.exe"
+
+[rpcs3]
+description = "PlayStation 3"
+license = "GPL-2.0"
+repo = "https://github.com/RPCS3/rpcs3"
+version = "v0.0.43-20640"
+url = "https://github.com/RPCS3/rpcs3-binaries-win/releases/download/build-1808e241d7b1bfb1c521e392b4c51a7d5494e9ca/rpcs3-v0.0.43-20640-1808e241_win64_msvc.7z"
+sha256 = "954321803df9bd812137088b7c5cdddfb731c26301f72c3cc16c9642d22960f5"
+exe = "rpcs3.exe"

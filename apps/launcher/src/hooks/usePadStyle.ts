@@ -30,6 +30,19 @@ function detect(): PadStyle | null {
 }
 
 /**
+ * Modelo do controle conectado, para o emulador (RPCS3) já vir mapeado:
+ * DualSense (PS5), DualShock 4 (PS4) ou Xbox. `null` sem controle.
+ */
+export function currentPadKind(): "dualsense" | "ds4" | "xbox" | null {
+  const pad = (navigator.getGamepads?.() ?? []).find((p) => p !== null);
+  if (!pad) return null;
+  const id = pad.id.toLowerCase();
+  if (/dualsense|0ce6|0df2/.test(id)) return "dualsense";
+  if (isPlayStationPad(id)) return "ds4";
+  return "xbox";
+}
+
+/**
  * Estilo dos símbolos de botão. No automático segue o controle conectado; sem controle, usa
  * PlayStation (o padrão do ROXemu).
  */

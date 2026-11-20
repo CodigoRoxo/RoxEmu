@@ -5,7 +5,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { CATEGORIES, SAMPLE_GAMES, SYSTEMS, fromLibrary, type Game, type SystemId } from "./data/games";
 import { useCoverColors } from "./hooks/useCoverColors";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
-import { usePadStyle } from "./hooks/usePadStyle";
+import { currentPadKind, usePadStyle } from "./hooks/usePadStyle";
 import { PadGlyph } from "./components/PadGlyph";
 import { gridOrder } from "./views/LibraryView";
 
@@ -26,7 +26,7 @@ interface Shelf {
 }
 
 /** Ordem das estantes de console no topo. */
-const SYSTEM_ORDER: SystemId[] = ["ps1", "ps2", "snes", "gba"];
+const SYSTEM_ORDER: SystemId[] = ["ps1", "ps2", "ps3", "snes", "gba"];
 
 export default function App() {
   const [library, setLibrary] = useState<LibraryGame[]>([]);
@@ -198,7 +198,7 @@ export default function App() {
     sound.play("launch");
     setSession({ game, phase: "starting" });
     try {
-      await backend.launchGame(game.id);
+      await backend.launchGame(game.id, currentPadKind());
     } catch (e) {
       sound.play("error");
       setSession({ game, phase: "error", message: String(e) });
@@ -210,9 +210,10 @@ export default function App() {
     setSession(null);
   }, []);
 
-  const addGame = useCallback(async () => {
+  /** Adiciona um jogo (arquivo) ou, com `folder`, um jogo de PS3 em pasta. */
+  const addGame = useCallback(async (folder = false) => {
     try {
-      const added = await backend.addGame();
+      const added = folder ? await backend.addGameFolder() : await backend.addGame();
       if (!added) return;
       sound.play("select");
       // A busca da capa já começou no backend: mostra o carregando desde já.
@@ -464,7 +465,7 @@ export default function App() {
           </nav>
         )}
         <div className="status">
-          <button className="gear add-round" onClick={addGame} aria-label="Adicionar jogo" title="Adicionar jogo">
+          <button className="gear add-round" onClick={() => addGame()} aria-label="Adicionar jogo" title="Adicionar jogo">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <path d="M12 5v14M5 12h14" strokeLinecap="round" />
             </svg>
@@ -546,7 +547,8 @@ export default function App() {
             setLibraryId(g.id);
           }}
           onLaunch={launch}
-          onAdd={addGame}
+          onAdd={() => addGame()}
+          onAddFolder={() => addGame(true)}
           onRemove={removeGame}
           onCover={async (game, kind) => {
             try {
@@ -632,7 +634,11 @@ export default function App() {
           session={session}
           onClose={closeSession}
           onOpenBios={() => backend.openBiosFolder().catch((e) => setToast(String(e)))}
-          onAdd={addGame}
+          onOpenSettings={() => {
+            setSession(null);
+            setShowSettings(true);
+          }}
+          onAdd={() => addGame()}
         />
       )}
     </div>

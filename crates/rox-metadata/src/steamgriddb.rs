@@ -24,6 +24,8 @@ pub struct HeroArt {
     pub logo: Option<PathBuf>,
     /// Arte quadrada do jogo, para os ícones da fileira (como no PS5).
     pub icon: Option<PathBuf>,
+    /// Capa vertical (600x900), usada quando o acervo de capas não tem a do jogo.
+    pub cover: Option<PathBuf>,
     /// Nome do jogo no SteamGridDB de onde veio a arte.
     pub source_name: Option<String>,
     /// A arte é de outro jogo da franquia (plano B), não do próprio jogo.
@@ -96,12 +98,23 @@ impl SteamGridDb {
 
     /// URL da melhor imagem de um tipo ("heroes", "logos" ou "grids" quadradas) para o jogo.
     fn best_image(&self, kind: &str, game_id: u64) -> Result<Option<String>, CoverError> {
-        let query = match kind {
-            "heroes" => "?dimensions=3840x1240,1920x620&types=static&nsfw=false&humor=false",
-            "grids" => "?dimensions=1024x1024,512x512&types=static&nsfw=false&humor=false",
-            _ => "?types=static&nsfw=false&humor=false",
+        let (endpoint, query) = match kind {
+            "heroes" => (
+                "heroes",
+                "?dimensions=3840x1240,1920x620&types=static&nsfw=false&humor=false",
+            ),
+            "grids" => (
+                "grids",
+                "?dimensions=1024x1024,512x512&types=static&nsfw=false&humor=false",
+            ),
+            // capa vertical, no formato de caixa
+            "covers" => (
+                "grids",
+                "?dimensions=600x900,660x930,342x482&types=static&nsfw=false&humor=false",
+            ),
+            _ => ("logos", "?types=static&nsfw=false&humor=false"),
         };
-        let json = self.get_json(&format!("/{kind}/game/{game_id}{query}"))?;
+        let json = self.get_json(&format!("/{endpoint}/game/{game_id}{query}"))?;
         Ok(parse_first_url(&json))
     }
 
@@ -167,6 +180,7 @@ impl SteamGridDb {
                     identity_done = true;
                     art.logo = self.fetch_kind("logos", game.id, "logos", file_key)?;
                     art.icon = self.fetch_kind("grids", game.id, "icons", file_key)?;
+                    art.cover = self.fetch_kind("covers", game.id, "sgdb-covers", file_key)?;
                 }
                 let Some(hero) = self.fetch_kind("heroes", game.id, "heroes", file_key)? else {
                     continue;

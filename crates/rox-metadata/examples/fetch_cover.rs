@@ -10,6 +10,7 @@ fn main() {
     let (stem, title, region, out, system) = match args.as_slice() {
         [s, t, r, o] => (s, t, r, o, SystemId::Ps1),
         [s, t, r, o, sys] if sys == "ps2" => (s, t, r, o, SystemId::Ps2),
+        [s, t, r, o, sys] if sys == "ps3" => (s, t, r, o, SystemId::Ps3),
         _ => {
             eprintln!("uso: fetch_cover <nome do arquivo> <título> <região> <pasta> [ps2]");
             std::process::exit(2);

@@ -158,9 +158,10 @@ impl CoverFetcher {
 
     /// Lista de capas disponíveis para o console (cache local de 7 dias).
     fn index(&self, system: SystemId) -> Result<Vec<String>, CoverError> {
+        // "boxarts-" (antes "index-"): a lista antiga podia vir cortada em repositórios grandes.
         let cache = self
             .cache_dir
-            .join(format!("index-{}.json", system.thumbnails_repo()));
+            .join(format!("boxarts-{}.json", system.thumbnails_repo()));
         let fresh = std::fs::metadata(&cache)
             .and_then(|m| m.modified())
             .ok()
@@ -172,33 +173,24 @@ impl CoverFetcher {
             }
         }
 
-        let url = format!(
-            "https://api.github.com/repos/libretro-thumbnails/{}/git/trees/master?recursive=1",
-            system.thumbnails_repo()
-        );
-        // O GitHub às vezes responde 5xx para listas grandes; tenta de novo algumas vezes.
-        let mut fetched = Err(CoverError::BadResponse("lista não baixada".into()));
-        for attempt in 0..3u64 {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_secs(attempt * 2));
-            }
-            fetched = self
-                .get_bytes(&url, 64 * 1024 * 1024)
-                .and_then(|(status, body)| {
-                    if status != 200 {
-                        return Err(CoverError::BadResponse(format!(
-                            "HTTP {status} ao listar capas"
-                        )));
-                    }
-                    parse_tree(&body)
-                });
-            match &fetched {
-                Err(CoverError::BadResponse(msg)) if msg.contains("HTTP 5") => {
-                    log::warn!("lista de capas: {msg}, tentando de novo");
-                }
-                _ => break,
-            }
-        }
+        // Pede só a pasta Named_Boxarts: a lista "recursiva" do repositório inteiro vem cortada
+        // (ou dá erro 500) nos repositórios grandes, como o do PS3.
+        let repo = system.thumbnails_repo();
+        let fetched = self
+            .get_json_retry(&format!(
+                "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/master"
+            ))
+            .and_then(|root| {
+                boxarts_sha(&root).ok_or_else(|| {
+                    CoverError::BadResponse("repositório de capas sem Named_Boxarts".into())
+                })
+            })
+            .and_then(|sha| {
+                self.get_json_retry(&format!(
+                    "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/{sha}"
+                ))
+            })
+            .map(|tree| parse_names(&tree));
         match fetched {
             Ok(names) => {
                 std::fs::create_dir_all(&self.cache_dir)?;
@@ -211,24 +203,59 @@ impl CoverFetcher {
     }
 }
 
-fn read_index(path: &Path) -> Option<Vec<String>> {
-    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+impl CoverFetcher {
+    /// GET de JSON com até 3 tentativas quando o GitHub responde 5xx.
+    fn get_json_retry(&self, url: &str) -> Result<serde_json::Value, CoverError> {
+        let mut last = CoverError::BadResponse("não baixado".into());
+        for attempt in 0..3u64 {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_secs(attempt * 2));
+            }
+            match self.get_bytes(url, 64 * 1024 * 1024) {
+                Ok((200, body)) => {
+                    return serde_json::from_slice(&body)
+                        .map_err(|e| CoverError::BadResponse(e.to_string()))
+                }
+                Ok((status, _)) if status >= 500 => {
+                    log::warn!("lista de capas: HTTP {status}, tentando de novo");
+                    last = CoverError::BadResponse(format!("HTTP {status} ao listar capas"));
+                }
+                Ok((status, _)) => {
+                    return Err(CoverError::BadResponse(format!(
+                        "HTTP {status} ao listar capas"
+                    )))
+                }
+                Err(e) => last = e,
+            }
+        }
+        Err(last)
+    }
 }
 
-/// Extrai os nomes das capas (sem `.png`) da resposta da API de árvore do GitHub.
-fn parse_tree(body: &[u8]) -> Result<Vec<String>, CoverError> {
-    let json: serde_json::Value =
-        serde_json::from_slice(body).map_err(|e| CoverError::BadResponse(e.to_string()))?;
-    let tree = json["tree"]
-        .as_array()
-        .ok_or_else(|| CoverError::BadResponse("lista de capas sem 'tree'".into()))?;
-    Ok(tree
+/// Acha o identificador (sha) da pasta Named_Boxarts na raiz do repositório.
+fn boxarts_sha(root: &serde_json::Value) -> Option<String> {
+    root["tree"]
+        .as_array()?
         .iter()
-        .filter_map(|e| e["path"].as_str())
-        .filter_map(|p| p.strip_prefix("Named_Boxarts/"))
-        .filter_map(|p| p.strip_suffix(".png"))
-        .map(str::to_string)
-        .collect())
+        .find(|e| e["path"] == "Named_Boxarts" && e["type"] == "tree")
+        .and_then(|e| e["sha"].as_str().map(str::to_string))
+}
+
+/// Nomes das capas (sem `.png`) dentro da pasta Named_Boxarts.
+fn parse_names(tree: &serde_json::Value) -> Vec<String> {
+    tree["tree"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|e| e["path"].as_str()?.strip_suffix(".png").map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn read_index(path: &Path) -> Option<Vec<String>> {
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
 }
 
 /// Conteúdo de um symlink do git: um caminho curto como `Outro Jogo (USA).png`.
@@ -386,8 +413,19 @@ mod tests {
     }
 
     #[test]
-    fn le_lista_da_api() {
-        let body = br#"{"tree":[{"path":"Named_Boxarts/A (USA).png"},{"path":"Named_Snaps/A (USA).png"},{"path":"README.md"}]}"#;
-        assert_eq!(parse_tree(body).unwrap(), vec!["A (USA)".to_string()]);
+    fn le_lista_da_api_em_duas_etapas() {
+        let root: serde_json::Value = serde_json::from_str(
+            r#"{"tree":[{"path":"README.md","type":"blob","sha":"x"},{"path":"Named_Boxarts","type":"tree","sha":"abc123"},{"path":"Named_Snaps","type":"tree","sha":"def"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(boxarts_sha(&root).as_deref(), Some("abc123"));
+        let sub: serde_json::Value = serde_json::from_str(
+            r#"{"tree":[{"path":"A (USA).png"},{"path":"B (Europe).png"},{"path":".gitkeep"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parse_names(&sub),
+            vec!["A (USA)".to_string(), "B (Europe)".to_string()]
+        );
     }
 }

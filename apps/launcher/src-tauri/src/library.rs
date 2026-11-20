@@ -48,8 +48,9 @@ pub struct LibraryGame {
     pub art_version: u32,
 }
 
-/// Versão atual da busca de artes (2 = hero + logo + ícone quadrado).
-pub const ART_VERSION: u32 = 2;
+/// Versão atual da busca de artes (2 = hero + logo + ícone quadrado; 3 = + capa vertical
+/// do SteamGridDB para jogos sem capa no acervo libretro, como quase todo o PS3).
+pub const ART_VERSION: u32 = 3;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct LibraryFile {
@@ -164,6 +165,10 @@ impl Library {
             }
             if art.icon.is_some() {
                 g.icon = art.icon;
+            }
+            // Capa do SteamGridDB só quando não há capa (a do acervo libretro tem preferência).
+            if g.cover.as_ref().is_none_or(|p| !p.exists()) && art.cover.is_some() {
+                g.cover = art.cover;
             }
             g.art_checked_at = Some(now_secs());
             g.art_version = ART_VERSION;

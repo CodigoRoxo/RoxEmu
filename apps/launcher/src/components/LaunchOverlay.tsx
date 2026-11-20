@@ -1,5 +1,7 @@
 import { SYSTEMS, type Game } from "../data/games";
+import type { PadStyle } from "../hooks/usePadStyle";
 import { FittedCover } from "./Cover";
+import { PadGlyph } from "./PadGlyph";
 
 export type LaunchPhase = "starting" | "playing" | "error" | "demo";
 
@@ -15,10 +17,12 @@ interface Props {
   onOpenBios: () => void;
   onOpenSettings: () => void;
   onAdd: () => void;
+  onStop: () => void;
+  padStyle: PadStyle;
 }
 
 /** Tela sobre a estante enquanto um jogo abre, roda ou dá erro. */
-export function LaunchOverlay({ session, onClose, onOpenBios, onOpenSettings, onAdd }: Props) {
+export function LaunchOverlay({ session, onClose, onOpenBios, onOpenSettings, onAdd, onStop, padStyle }: Props) {
   const { game, phase, message } = session;
   const core = SYSTEMS[game.system].core;
   const biosMissing = phase === "error" && !!message?.includes("BIOS");
@@ -48,12 +52,17 @@ export function LaunchOverlay({ session, onClose, onOpenBios, onOpenSettings, on
           <>
             <h3>Jogando agora</h3>
             <p>
-              {game.system === "ps2"
-                ? `${game.title} está aberto no PCSX2. Para sair, aperte Esc ou o botão Guide do controle e escolha fechar o jogo no menu.`
-                : game.system === "ps3"
-                  ? `${game.title} está aberto no RPCS3. Nas primeiras vezes o emulador traduz o código do jogo enquanto ele roda: telas de carregamento podem ficar paradas por alguns minutos. Não feche — fica mais rápido a cada vez. Para sair, feche a janela do jogo (Alt+F4).`
-                  : `${game.title} está aberto na janela do jogo. Para voltar para a estante, aperte Esc ou o botão Guide do controle.`}
+              {game.system === "ps3"
+                ? `${game.title} está aberto no RPCS3. Nas primeiras vezes o emulador traduz o código do jogo enquanto ele roda: telas de carregamento podem ficar paradas por alguns minutos.`
+                : `${game.title} está aberto na janela do jogo.`}
             </p>
+            <span className="combo-hint">
+              Para voltar ao console: segure <PadGlyph action="create" style={padStyle} /> +{" "}
+              <PadGlyph action="options" style={padStyle} /> ou aperte o botão PS
+            </span>
+            <button className="btn play close-game" onClick={onStop}>
+              Fechar jogo
+            </button>
           </>
         )}
 

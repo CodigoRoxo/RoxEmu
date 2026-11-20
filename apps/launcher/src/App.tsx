@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ambient } from "./components/Ambient";
 import { LaunchOverlay, type LaunchSession } from "./components/LaunchOverlay";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { BootScreen } from "./components/BootScreen";
+import { GameMenu, UninstallConfirm, menuItems, type MenuItem } from "./components/GameMenu";
 import { CATEGORIES, SAMPLE_GAMES, SYSTEMS, fromLibrary, type Game, type SystemId } from "./data/games";
 import { useCoverColors } from "./hooks/useCoverColors";
 import { useGamepad, type PadButton } from "./hooks/useGamepad";
@@ -10,7 +12,20 @@ import { PadGlyph } from "./components/PadGlyph";
 import { gridOrder } from "./views/LibraryView";
 
 /** Ações da interface, iguais para teclado e controle. */
-type UiAction = "left" | "right" | "up" | "down" | "confirm" | "back" | "details" | "fav" | "prev" | "next" | "options" | "create";
+type UiAction =
+  | "left"
+  | "right"
+  | "up"
+  | "down"
+  | "confirm"
+  | "back"
+  | "details"
+  | "fav"
+  | "prev"
+  | "next"
+  | "options"
+  | "create"
+  | "mode";
 import * as backend from "./lib/backend";
 import type { AppInfo, LibraryGame } from "./lib/backend";
 import * as sound from "./lib/sounds";
@@ -45,6 +60,9 @@ export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [soundOn, setSoundOn] = useState(sound.soundEnabled());
   const [showSettings, setShowSettings] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [menu, setMenu] = useState<{ game: Game; index: number } | null>(null);
+  const [confirm, setConfirm] = useState<{ game: Game; focus: 0 | 1; busy: boolean } | null>(null);
   const { style: padStyle, pref: padPref, setPref: setPadPref, detected: padDetected } = usePadStyle();
   const clock = useClock();
   const toggleSound = useCallback(() => {
@@ -332,12 +350,98 @@ export default function App() {
     [libraryList, libraryId],
   );
 
+  // ---------- menu do jogo (OPTIONS) e desinstalar ----------
+  const openMenu = useCallback((game: Game) => {
+    sound.play("select");
+    setMenu({ game, index: 0 });
+  }, []);
+  const closeMenu = useCallback(() => {
+    sound.play("back");
+    setMenu(null);
+  }, []);
+  const askUninstall = useCallback((game: Game) => {
+    sound.play("pop");
+    setMenu(null);
+    setConfirm({ game, focus: 0, busy: false }); // foco começa em "Cancelar"
+  }, []);
+  const doUninstall = useCallback(async () => {
+    if (!confirm || confirm.busy) return;
+    setConfirm({ ...confirm, busy: true });
+    try {
+      const freed = await backend.uninstallGame(confirm.game.id);
+      sound.play("back");
+      setToast(`${confirm.game.title} foi desinstalado (${(freed / 1024 ** 3).toFixed(1).replace(".", ",")} GB liberados)`);
+      setConfirm(null);
+      await refresh();
+    } catch (e) {
+      sound.play("error");
+      setConfirm(null);
+      setToast(String(e));
+    }
+  }, [confirm, refresh]);
+  const pickMenu = useCallback(
+    (it: MenuItem) => {
+      if (!menu) return;
+      const g = menu.game;
+      if (it.id === "uninstall") return askUninstall(g);
+      setMenu(null);
+      if (it.id === "play") launch(g);
+      else if (it.id === "fav") toggleFavorite(g);
+      else if (it.id === "details") openDetails(g);
+      else if (it.id === "remove") removeGame(g);
+      else if (it.id === "art") {
+        setLoading(g.id, true);
+        backend.refreshCover(g.id).catch(() => {});
+        backend.refreshArt(g.id).catch(() => {});
+        setToast(`Buscando capa e artes de ${g.title}…`);
+      }
+    },
+    [menu, askUninstall, launch, toggleFavorite, openDetails, removeGame, setLoading],
+  );
+
   /**
    * Uma ação só para teclado e controle (botões no padrão do PS5):
-   * ✕ confirma · ○ volta · △ detalhes · □ favorito · L1/R1 estante · Options modo · Create jogo.
+   * ✕ confirma · ○ volta · △ detalhes · □ favorito · L1/R1 estante · OPTIONS opções do jogo ·
+   * Create adiciona jogo.
    */
   const dispatch = (a: UiAction) => {
+    if (booting) {
+      setBooting(false);
+      return;
+    }
+    // Jogo aberto: só fecha pelo ROXemu se a janela dele estiver em foco (evita fechar sem querer).
+    if (session?.phase === "playing") {
+      if (a === "confirm" && document.hasFocus()) backend.stopGame().catch((e) => setToast(String(e)));
+      return;
+    }
     if (busy) return;
+    if (confirm) {
+      if (confirm.busy) return;
+      if (a === "left" || a === "right" || a === "up" || a === "down") {
+        sound.play("move");
+        setConfirm({ ...confirm, focus: confirm.focus === 0 ? 1 : 0 });
+      } else if (a === "confirm") {
+        if (confirm.focus === 1) doUninstall();
+        else {
+          sound.play("back");
+          setConfirm(null);
+        }
+      } else if (a === "back") {
+        sound.play("back");
+        setConfirm(null);
+      }
+      return;
+    }
+    if (menu) {
+      const items = menuItems(menu.game);
+      if (a === "up" || a === "down") {
+        const next = Math.max(0, Math.min(items.length - 1, menu.index + (a === "up" ? -1 : 1)));
+        if (next !== menu.index) sound.play("move");
+        setMenu({ ...menu, index: next });
+      } else if (a === "confirm") pickMenu(items[menu.index]);
+      else if (a === "back" || a === "options") closeMenu();
+      return;
+    }
     if (showSettings) {
       if (a === "back") {
         sound.play("back");
@@ -354,7 +458,7 @@ export default function App() {
       const d = a === "prev" ? -1 : 1;
       return mode === "console" ? changeShelf(d) : changeCategory(d);
     }
-    if (a === "options") return switchMode(mode === "console" ? "library" : "console");
+    if (a === "mode") return switchMode(mode === "console" ? "library" : "console");
     if (a === "create") return addGame();
 
     if (mode === "library") {
@@ -362,6 +466,7 @@ export default function App() {
       if (a === "left" || a === "right" || a === "up" || a === "down") libraryNav(a);
       else if (a === "confirm" && sel) launch(sel);
       else if (a === "fav" && sel) toggleFavorite(sel);
+      else if (a === "options" && sel) openMenu(sel);
       else if (a === "back") switchMode("console");
       return;
     }
@@ -370,6 +475,7 @@ export default function App() {
     if (a === "right") selectIndex(pos + 1);
     else if (a === "left") selectIndex(pos - 1);
     else if (a === "confirm") activate(item);
+    else if (a === "options" && item.kind === "game") openMenu(item.game);
     else if (a === "details" && item.kind === "game") openDetails(item.game);
     else if (a === "fav" && item.kind === "game") toggleFavorite(item.game);
     else if (a === "back") {
@@ -394,13 +500,18 @@ export default function App() {
       e: "next",
       f: "fav",
       i: "details",
-      Tab: "options",
+      o: "options",
+      ContextMenu: "options",
+      Tab: "mode",
     };
     const onKey = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLInputElement;
       if (typing && e.key !== "Escape") return;
       const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-      if (!a) return;
+      if (!a) {
+        setBooting(false); // qualquer tecla pula a animação de ligar
+        return;
+      }
       e.preventDefault();
       dispatchRef.current(a);
     };
@@ -428,6 +539,31 @@ export default function App() {
 
   return (
     <div className={`app mode-${mode}`}>
+      {booting && <BootScreen onDone={() => setBooting(false)} />}
+      {menu && (
+        <GameMenu
+          game={menu.game}
+          index={menu.index}
+          padStyle={padStyle}
+          onPick={pickMenu}
+          onHover={(i) => setMenu({ ...menu, index: i })}
+          onClose={closeMenu}
+        />
+      )}
+      {confirm && (
+        <UninstallConfirm
+          game={confirm.game}
+          focus={confirm.focus}
+          busy={confirm.busy}
+          padStyle={padStyle}
+          onFocus={(f) => setConfirm({ ...confirm, focus: f })}
+          onConfirm={doUninstall}
+          onCancel={() => {
+            sound.play("back");
+            setConfirm(null);
+          }}
+        />
+      )}
       <Ambient c1={tint1} c2={tint2} art={focusGame?.coverUrl} hero={focusGame?.heroUrl} />
 
       <header className="top">
@@ -535,7 +671,7 @@ export default function App() {
           selected={pos}
           onSelect={selectIndex}
           onActivate={activate}
-          onDetails={openDetails}
+          onDetails={openMenu}
           onToggleFavorite={toggleFavorite}
         />
       ) : (
@@ -550,6 +686,7 @@ export default function App() {
           onAdd={() => addGame()}
           onAddFolder={() => addGame(true)}
           onRemove={removeGame}
+          onUninstall={askUninstall}
           onCover={async (game, kind) => {
             try {
               if (kind === "web") {
@@ -580,7 +717,7 @@ export default function App() {
           {mode === "console" && (
             <span>
               <PadGlyph action="details" style={padStyle} />
-              Detalhes
+              Biblioteca
             </span>
           )}
           <span>
@@ -600,7 +737,7 @@ export default function App() {
           </span>
           <span>
             <PadGlyph action="options" style={padStyle} />
-            {mode === "console" ? "Biblioteca" : "Console"}
+            Opções do jogo
           </span>
         </div>
       </footer>
@@ -634,6 +771,8 @@ export default function App() {
           session={session}
           onClose={closeSession}
           onOpenBios={() => backend.openBiosFolder().catch((e) => setToast(String(e)))}
+          onStop={() => backend.stopGame().catch((e) => setToast(String(e)))}
+          padStyle={padStyle}
           onOpenSettings={() => {
             setSession(null);
             setShowSettings(true);

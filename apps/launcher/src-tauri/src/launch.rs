@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::library::{now_secs, LibraryGame};
 use crate::rpcs3::{self, PadKind};
-use crate::{pcsx2, AppState};
+use crate::{pcsx2, session, AppState};
 
 /// Evento enviado para a interface (`listen("runner")`).
 #[derive(Debug, Clone, Serialize)]
@@ -172,6 +172,8 @@ fn spawn(app: &AppHandle, data: &DataDirs, game: &LibraryGame, pad: PadKind) -> 
         .spawn()
         .map_err(|e| format!("Não foi possível abrir o runner: {e}"))?;
     let stdout = child.stdout.take().ok_or("sem stdout do runner")?;
+    session::set_pid(app, Some(child.id()));
+    session::watch_close_combo(app, child.id());
 
     let app = app.clone();
     let game_id = game.id;
@@ -205,16 +207,28 @@ fn spawn(app: &AppHandle, data: &DataDirs, game: &LibraryGame, pad: PadKind) -> 
             }
         }
         let status = child.wait();
+        let by_user = session::take_stop_requested();
         if !finished {
             let played = now_secs().saturating_sub(started_at);
             record(&app, game_id, played);
-            let message = format!(
-                "O jogo fechou inesperadamente ({}). Detalhes em {}",
-                status.map(|s| s.to_string()).unwrap_or_default(),
-                log_path.display()
-            );
-            let _ = app.emit("runner", UiRunnerEvent::Error { game_id, message });
+            let event = if by_user {
+                UiRunnerEvent::Exited {
+                    game_id,
+                    played_secs: played,
+                }
+            } else {
+                UiRunnerEvent::Error {
+                    game_id,
+                    message: format!(
+                        "O jogo fechou inesperadamente ({}). Detalhes em {}",
+                        status.map(|s| s.to_string()).unwrap_or_default(),
+                        log_path.display()
+                    ),
+                }
+            };
+            let _ = app.emit("runner", event);
         }
+        session::set_pid(&app, None);
         if let Ok(mut slot) = app.state::<Running>().0.lock() {
             *slot = None;
         }
@@ -291,15 +305,19 @@ fn watch_standalone(app: &AppHandle, game: &LibraryGame, prepared: Prepared) -> 
         .spawn()
         .map_err(|e| format!("Não foi possível abrir o {name}: {e}"))?;
     let _ = app.emit("runner", UiRunnerEvent::Started { game_id: game.id });
+    session::set_pid(app, Some(child.id()));
+    session::watch_close_combo(app, child.id());
 
     let app = app.clone();
     let game_id = game.id;
     let started = std::time::Instant::now();
     std::thread::spawn(move || {
         let status = child.wait();
+        let by_user = session::take_stop_requested();
+        session::set_pid(&app, None);
         let played = started.elapsed().as_secs();
         record(&app, game_id, played);
-        let failed_fast = played < 5 && status.as_ref().map_or(true, |s| !s.success());
+        let failed_fast = !by_user && played < 5 && status.as_ref().map_or(true, |s| !s.success());
         let event = if failed_fast {
             UiRunnerEvent::Error {
                 game_id,

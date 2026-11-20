@@ -50,7 +50,8 @@ português e o controle (DualSense, DualShock 4 ou Xbox) já mapeado.
 O PS2 roda no **PCSX2** embutido: o ROXemu configura e abre ele direto em tela cheia, já com a
 BIOS, pastas de save e controle. Coloque a BIOS do seu PS2 (arquivo de 4 MB, ex.: `scph39001.bin`)
 na mesma pasta de BIOS do ROXemu. ISO e CHD funcionam; com CHD, deixe os jogos numa pasta `ps2`
-para o ROXemu saber o console. Para sair do jogo: Esc ou Guide e fechar pelo menu.
+para o ROXemu saber o console. Para sair de qualquer jogo: segure SELECT + START (1 s) ou aperte
+o botão PS / Guide, e o ROXemu fecha o jogo e volta para a estante.
 
 ### Rodar um jogo de PS1 (Fase 1)
 
@@ -88,8 +89,14 @@ Padrão do PS5: ✕ confirma e ○ volta. Os símbolos na tela seguem o controle
 | I | △ | Y | Detalhes do jogo |
 | F | □ | X | Favoritar |
 | Q / E | L1 / R1 | LB / RB | Trocar estante (Console) ou categoria (Biblioteca) |
-| Tab | Options | Menu | Alternar Console / Biblioteca |
+| O | OPTIONS | Menu | Opções do jogo (favoritar, artes, remover, **desinstalar**) |
+| Tab | — | — | Alternar Console / Biblioteca |
 | — | Create | View | Adicionar jogo |
+| — | SELECT + START (segurar) / PS | View + Menu / Guide | Fechar o jogo e voltar para o console |
+
+**Desinstalar** apaga os arquivos do jogo do disco para sempre (sem lixeira), depois de uma
+confirmação que começa em "Cancelar". Só apaga o que é do jogo (o .cue e seus .bin, os discos do
+.m3u, a pasta do jogo de PS3); saves e memory cards ficam guardados.
 
 ## Legal
 

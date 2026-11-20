@@ -77,6 +77,10 @@ export async function addGame(): Promise<LibraryGame | null> {
 }
 
 export const removeGame = (id: number) => invoke<void>("remove_game", { id });
+/** Apaga os arquivos do jogo do disco para sempre e tira da estante. Devolve os bytes liberados. */
+export const uninstallGame = (id: number) => invoke<number>("uninstall_game", { id });
+/** Fecha o jogo aberto e volta para o ROXemu. */
+export const stopGame = () => invoke<void>("stop_game");
 export const setFavorite = (id: number, favorite: boolean) => invoke<void>("set_favorite", { id, favorite });
 /** `pad`: controle conectado ("dualsense" | "ds4" | "xbox"), para o emulador já vir mapeado. */
 export const launchGame = (id: number, pad: string | null) => invoke<void>("launch_game", { id, pad });

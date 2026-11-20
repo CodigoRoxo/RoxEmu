@@ -10,6 +10,7 @@ interface Props {
   onAdd: () => void;
   onAddFolder: () => void;
   onRemove: (game: Game) => void;
+  onUninstall: (game: Game) => void;
   onCover: (game: Game, kind: "web" | "file") => void;
 }
 
@@ -26,7 +27,7 @@ export function gridOrder(games: Game[]): Game[] {
 }
 
 /** Modo Biblioteca: grade agrupada por console e painel de detalhes. */
-export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onAddFolder, onRemove, onCover }: Props) {
+export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onAddFolder, onRemove, onUninstall, onCover }: Props) {
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
@@ -125,7 +126,7 @@ export function LibraryView({ games, selectedId, onSelect, onLaunch, onAdd, onAd
         ))}
       </div>
 
-      {selected && <DetailPanel game={selected} onLaunch={onLaunch} onRemove={onRemove} onCover={onCover} />}
+      {selected && <DetailPanel game={selected} onLaunch={onLaunch} onRemove={onRemove} onUninstall={onUninstall} onCover={onCover} />}
     </section>
   );
 }
@@ -134,11 +135,13 @@ function DetailPanel({
   game,
   onLaunch,
   onRemove,
+  onUninstall,
   onCover,
 }: {
   game: Game;
   onLaunch: (g: Game) => void;
   onRemove: (g: Game) => void;
+  onUninstall: (g: Game) => void;
   onCover: (g: Game, kind: "web" | "file") => void;
 }) {
   const colors = { "--c1": game.c1, "--c2": game.c2 } as CSSProperties;
@@ -206,6 +209,9 @@ function DetailPanel({
           <button>Configurações</button>
           <button className="danger" onClick={() => onRemove(game)}>
             Remover da estante
+          </button>
+          <button className="danger" onClick={() => onUninstall(game)}>
+            Desinstalar
           </button>
         </div>
       )}

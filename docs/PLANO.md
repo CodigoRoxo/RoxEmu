@@ -342,6 +342,9 @@ discs (game_id INTEGER, disc_number INTEGER, path TEXT)
 - [x] Pastas de console no fim de "Todos" (mosaico de capas) que abrem a estante do console.
 - [x] Carregando estilo iOS em cima da capa enquanto ela é buscada.
 - [x] BIOS do PS2 reconhecida pelo conteúdo (ROM0), não só pelo tamanho.
+- [x] Tudo pelo controle: OPTIONS abre as opções do jogo num popup de vidro; Desinstalar apaga
+      do disco para sempre (com confirmação); SELECT + START ou PS fecham o jogo e voltam para a
+      estante; animação de "ligar o console" ao abrir.
 
 ### Fase 6 — Além do PS1
 - [ ] Abstração `System`: cada console é um módulo que declara:

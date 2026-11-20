@@ -22,3 +22,4 @@ rox-metadata.workspace = true
 tauri-plugin-dialog = "2"
 log.workspace = true
 env_logger.workspace = true
+gilrs = "0.11"

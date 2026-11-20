@@ -7,7 +7,9 @@ mod launch;
 mod library;
 mod pcsx2;
 mod rpcs3;
+mod session;
 mod settings;
+mod uninstall;
 
 use std::sync::Mutex;
 
@@ -271,6 +273,44 @@ fn remove_game(state: State<AppState>, id: i64) -> Result<(), String> {
     state.library.lock().map_err(|e| e.to_string())?.remove(id)
 }
 
+/// Desinstala: apaga os arquivos do jogo do disco PARA SEMPRE (sem lixeira) e tira da estante.
+/// Os saves ficam. Devolve quantos bytes foram liberados.
+#[tauri::command]
+fn uninstall_game(app: AppHandle, id: i64) -> Result<u64, String> {
+    if app
+        .state::<launch::Running>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        == Some(id)
+    {
+        return Err("Feche o jogo antes de desinstalar.".into());
+    }
+    let state = app.state::<AppState>();
+    let game = {
+        let lib = state.library.lock().map_err(|e| e.to_string())?;
+        lib.get(id)
+            .cloned()
+            .ok_or("Jogo não encontrado na estante.")?
+    };
+    let targets = uninstall::targets(&game.path)?;
+    log::info!("desinstalando {}: {:?}", game.title, targets);
+    let freed = uninstall::delete(&targets)?;
+    state
+        .library
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(id)?;
+    Ok(freed)
+}
+
+/// Fecha o jogo aberto e volta para o ROXemu.
+#[tauri::command]
+fn stop_game(app: AppHandle) -> Result<(), String> {
+    session::stop_game(&app)
+}
+
 #[tauri::command]
 fn set_favorite(state: State<AppState>, id: i64, favorite: bool) -> Result<(), String> {
     state
@@ -321,6 +361,7 @@ pub fn run() {
             settings: Mutex::new(settings),
         })
         .manage(launch::Running::default())
+        .manage(session::RunningPid::default())
         .setup(move |app| {
             // A interface só pode ler imagens da pasta de capas (nada mais do disco).
             app.asset_protocol_scope()
@@ -346,7 +387,9 @@ pub fn run() {
             ps3_status,
             open_ps3_firmware_page,
             install_ps3_firmware,
-            add_game_folder
+            add_game_folder,
+            uninstall_game,
+            stop_game
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o ROXemu");
